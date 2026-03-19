@@ -1,0 +1,124 @@
+.agent-monitor {
+  margin: 20px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.monitor-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.monitor-header h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.connection-status {
+  font-size: 20px;
+  margin-left: 10px;
+  animation: pulse 1s infinite;
+}
+
+.connection-status.disconnected {
+  animation: none;
+  opacity: 0.5;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.toggle-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+}
+
+.monitor-content {
+  padding: 15px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #f5f5f5;
+}
+
+.no-events {
+  color: #999;
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-left: 4px solid #999;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.event-icon {
+  font-size: 20px;
+  min-width: 30px;
+}
+
+.event-details {
+  flex: 1;
+}
+
+.event-name {
+  margin: 0;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.event-time {
+  margin: 4px 0 0 0;
+  color: #999;
+  font-size: 11px;
+}
+
+.event-data {
+  margin: 6px 0 0 0;
+  color: #666;
+  background: #f9f9f9;
+  padding: 6px;
+  border-radius: 2px;
+  font-family: monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-monitor.collapsed .monitor-content {
+  display: none;
+}

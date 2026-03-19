@@ -1,0 +1,171 @@
+.results-viewer {
+  margin: 20px;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.results-empty {
+  margin: 20px;
+  padding: 40px;
+  background: #f9f9f9;
+  border: 1px dashed #ddd;
+  border-radius: 8px;
+  text-align: center;
+  color: #999;
+}
+
+.results-viewer h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+.result-header {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.result-header p {
+  margin: 8px 0;
+  color: #333;
+}
+
+.status {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status.complete {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.status.partial {
+  background: #fff9c4;
+  color: #f57f17;
+}
+
+.status.failed {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.results-table {
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+thead {
+  background: #f0f0f0;
+  font-weight: 600;
+}
+
+th, td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+th {
+  color: #333;
+}
+
+tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.field-name {
+  font-weight: 500;
+  color: #333;
+  min-width: 150px;
+}
+
+.field-value {
+  color: #666;
+  font-family: monospace;
+  font-size: 13px;
+  max-width: 300px;
+  word-break: break-word;
+}
+
+.null {
+  color: #999;
+  font-style: italic;
+  font-family: sans-serif;
+}
+
+.field-override {
+  min-width: 150px;
+}
+
+.override-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.override-input:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 5px rgba(33, 150, 243, 0.3);
+}
+
+.override-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.apply-btn,
+.cancel-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.3s;
+}
+
+.apply-btn {
+  background: #4CAF50;
+  color: white;
+  flex: 1;
+}
+
+.apply-btn:hover {
+  background: #45a049;
+}
+
+.cancel-btn {
+  background: #999;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #777;
+}
+
+.apply-btn:disabled,
+.cancel-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  color: #999;
+}
