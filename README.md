@@ -1,4 +1,4 @@
-# DocFlow - Intelligent Document Extraction System
+# Dockumented
 
 A two-model agent architecture for converting semi-structured and unstructured documents into fully structured, queryable data.
 
