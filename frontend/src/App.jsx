@@ -13,6 +13,29 @@ function App() {
   const [isExtracting, setIsExtracting] = useState(false)
   const [error, setError] = useState('')
   const [configOpen, setConfigOpen] = useState(false)
+  const [theme, setTheme] = useState('day')
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('docflow-theme')
+      if (saved === 'day' || saved === 'night') {
+        setTheme(saved)
+      }
+    } catch {
+    }
+  }, [])
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('docflow-theme', theme)
+    } catch {
+    }
+  }, [theme])
+
+  const toggleTheme = () => {
+    const next = theme === 'day' ? 'night' : 'day'
+    setTheme(next)
+  }
 
   const handleDocumentParsed = (data) => {
     setUploadedDocument(data)
@@ -36,8 +59,6 @@ function App() {
         schema
       )
 
-      // In a real scenario, you'd poll for results or use WebSocket
-      // For now, just show that extraction started
       setExtractionResult({
         result_id: response.data.result_id,
         filename: uploadedDocument.filename,
@@ -54,7 +75,6 @@ function App() {
 
   const handleOverridesApplied = () => {
     setError('')
-    // Reset or show success message
   }
 
   const handleError = (errorMessage) => {
@@ -62,19 +82,28 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-theme={theme}>
       <header className="app-header">
         <div className="header-content">
-          <h1>🚀 DocFlow</h1>
+          <h1>Dokument</h1>
           <p>Intelligent Document Extraction System</p>
         </div>
-        <button
-          className="config-btn"
-          onClick={() => setConfigOpen(true)}
-          title="Configure API Keys"
-        >
-          ⚙️ Settings
-        </button>
+        <div className="header-actions">
+          <button
+            className="config-btn"
+            onClick={() => setConfigOpen(true)}
+            title="Configure API Keys"
+          >
+            Settings
+          </button>
+          <button
+            className="config-btn"
+            onClick={toggleTheme}
+            title="Toggle Day/Night Mode"
+          >
+            {theme === 'day' ? '\u2600' : '\u263D'}
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
@@ -82,7 +111,7 @@ function App() {
           {error && (
             <div className="error-banner">
               <p>{error}</p>
-              <button onClick={() => setError('')}>✕</button>
+              <button onClick={() => setError('')}>Close</button>
             </div>
           )}
 
@@ -95,7 +124,7 @@ function App() {
 
               {uploadedDocument && (
                 <div className="document-info">
-                  <h3>✓ Document Loaded</h3>
+                  <h3>Document Loaded</h3>
                   <p><strong>File:</strong> {uploadedDocument.filename}</p>
                   <p><strong>Size:</strong> {(uploadedDocument.fullTextLength / 1024).toFixed(2)} KB</p>
                   <p><strong>Preview:</strong></p>
@@ -131,7 +160,7 @@ function App() {
       />
 
       <footer className="app-footer">
-        <p>DocFlow v1.0.0 | Two-Model Agent Architecture | Lucas 2026</p>
+        <p>Dokument v1.0.0 | Two-Model Agent Architecture | Lucas 2026</p>
       </footer>
     </div>
   )

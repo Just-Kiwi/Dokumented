@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import useWebSocket from '../hooks/useWebSocket'
 import './AgentMonitor.css'
 
@@ -16,16 +16,17 @@ export const AgentMonitor = ({ resultId }) => {
 
   const getEventIcon = (event) => {
     const icons = {
-      'fingerprint_assigned': '🔍',
-      'script_found': '📦',
-      'script_written': '✍️',
-      'script_executed': '▶️',
-      'dllm_check_complete': '✅',
-      'retry': '🔄',
-      'escalated_to_human': '⚠️',
-      'complete': '🎉'
+      'fingerprint_assigned': '\uD83D\uDD0D',
+      'script_found': '\uD83D\uDCE6',
+      'script_written': '\u270F\uFE0F',
+      'script_executed': '\u25B6\uFE0F',
+      'dllm_check_complete': '\u2705',
+      'retry': '\uD83D\uDD04',
+      'escalated_to_human': '\u26A0\uFE0F',
+      'complete': '\uD83C\uDF89',
+      'processing': '\u23F3'
     }
-    return icons[event] || '📝'
+    return icons[event] || '\uD83D\uDCDD'
   }
 
   const getEventColor = (event) => {
@@ -37,7 +38,8 @@ export const AgentMonitor = ({ resultId }) => {
       'dllm_check_complete': '#00BCD4',
       'retry': '#FF9800',
       'escalated_to_human': '#f44336',
-      'complete': '#4CAF50'
+      'complete': '#4CAF50',
+      'processing': '#9C27B0'
     }
     return colors[event] || '#666'
   }
@@ -46,18 +48,20 @@ export const AgentMonitor = ({ resultId }) => {
     <div className={`agent-monitor ${isExpanded ? 'expanded' : 'collapsed'}`}>
       <div className="monitor-header" onClick={() => setIsExpanded(!isExpanded)}>
         <h3>
-          🤖 Agent Monitor
+          Agent Monitor
           <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-            {isConnected ? '●' : '○'}
+            {isConnected ? '\u25CF' : '\u25CB'}
           </span>
         </h3>
-        <button className="toggle-btn">{isExpanded ? '▼' : '▶'}</button>
+        <button className="toggle-btn">{isExpanded ? '\u25BC' : '\u25B6'}</button>
       </div>
 
       {isExpanded && (
         <div className="monitor-content">
           {events.length === 0 ? (
-            <p className="no-events">Waiting for extraction events...</p>
+            <p className="no-events">
+              {resultId ? 'Waiting for extraction events...' : 'Upload and extract a document to see events'}
+            </p>
           ) : (
             <div className="events-list">
               {events.map((event, index) => (

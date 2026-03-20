@@ -28,14 +28,14 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
         await setConfig('MERCURY_BASE_URL', dllmUrl)
       }
 
-      setMessage('✓ Configuration saved successfully!')
+      setMessage('Configuration saved successfully!')
       setTimeout(() => {
         setLlmKey('')
         setDllmKey('')
         setMessage('')
       }, 2000)
     } catch (error) {
-      setMessage(`✗ Error saving configuration: ${error.message}`)
+      setMessage(`Error saving configuration: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
@@ -46,7 +46,6 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
     setKeyStatus({ llm: false, dllm: false })
 
     try {
-      // Check if keys exist in backend config
       const checkLlm = await getConfig('ANTHROPIC_API_KEY').catch(() => null)
       const checkDllm = await getConfig('MERCURY_API_KEY').catch(() => null)
 
@@ -70,8 +69,8 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
     <div className="config-panel-backdrop">
       <div className="config-panel">
         <div className="config-header">
-          <h2>⚙️ Configuration</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <h2>Configuration</h2>
+          <button className="close-btn" onClick={onClose}>Close</button>
         </div>
 
         <div className="config-content">
@@ -85,7 +84,7 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
               disabled={isLoading}
             />
             <p className="hint">Leave empty to keep existing key</p>
-            {keyStatus.llm && <p className="status-text">✓ Key configured</p>}
+            {keyStatus.llm && <p className="status-text">Key configured</p>}
           </div>
 
           <div className="config-section">
@@ -98,7 +97,7 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
               disabled={isLoading}
             />
             <p className="hint">Leave empty to keep existing key</p>
-            {keyStatus.dllm && <p className="status-text">✓ Key configured</p>}
+            {keyStatus.dllm && <p className="status-text">Key configured</p>}
           </div>
 
           <div className="config-section">
@@ -114,7 +113,7 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
           </div>
 
           {message && (
-            <div className={`message ${message.includes('✗') ? 'error' : 'success'}`}>
+            <div className={`message ${message.includes('Error') ? 'error' : 'success'}`}>
               {message}
             </div>
           )}
@@ -125,14 +124,14 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
               className="check-btn"
               disabled={isLoading}
             >
-              {isLoading ? '⏳ Checking...' : '🔍 Check Configuration'}
+              {isLoading ? 'Checking...' : 'Check Configuration'}
             </button>
             <button
               onClick={handleSaveConfig}
               className="save-btn"
               disabled={isLoading || (!llmKey && !dllmKey)}
             >
-              {isLoading ? '⏳ Saving...' : '💾 Save Configuration'}
+              {isLoading ? 'Saving...' : 'Save Configuration'}
             </button>
             <button
               onClick={onClose}

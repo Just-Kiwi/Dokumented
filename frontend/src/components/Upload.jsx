@@ -44,7 +44,7 @@ export const Upload = ({ onDocumentParsed, onError }) => {
 
   return (
     <div className="upload-container">
-      <h2>📄 Upload Document</h2>
+      <h2>Upload Document</h2>
       <div
         className={`drop-zone ${isDragging ? 'dragging' : ''}`}
         onDragOver={(e) => {

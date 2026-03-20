@@ -28,7 +28,6 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
   }
 
   const handleExtract = () => {
-    // Validate fields
     if (fields.length === 0) {
       alert('Please add at least one field to extract')
       return
@@ -44,7 +43,7 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
 
   return (
     <div className="schema-config">
-      <h2>🎯 Define Extraction Schema</h2>
+      <h2>Define Extraction Schema</h2>
       <p>Specify which fields you want to extract from the document:</p>
 
       <div className="fields-list">
@@ -77,7 +76,7 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
               className="remove-btn"
               disabled={isLoading}
             >
-              ✕
+              Remove
             </button>
           </div>
         ))}
@@ -96,7 +95,7 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
           className="extract-btn"
           disabled={isLoading || fields.length === 0}
         >
-          {isLoading ? '⏳ Extracting...' : '🚀 Start Extraction'}
+          {isLoading ? 'Extracting...' : 'Start Extraction'}
         </button>
       </div>
     </div>

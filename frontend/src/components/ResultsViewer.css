@@ -1,36 +1,39 @@
 .results-viewer {
   margin: 20px;
   padding: 20px;
-  background: #f9f9f9;
+  background: var(--surface);
   border-radius: 8px;
+  transition: background-color 0.2s ease;
 }
 
 .results-empty {
   margin: 20px;
   padding: 40px;
-  background: #f9f9f9;
-  border: 1px dashed #ddd;
+  background: var(--surface);
+  border: 1px dashed var(--border);
   border-radius: 8px;
   text-align: center;
-  color: #999;
+  color: var(--muted);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .results-viewer h2 {
   margin-top: 0;
-  color: #333;
+  color: var(--text);
 }
 
 .result-header {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 15px;
   margin-bottom: 20px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .result-header p {
   margin: 8px 0;
-  color: #333;
+  color: var(--text);
 }
 
 .status {
@@ -64,39 +67,43 @@
 table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 thead {
-  background: #f0f0f0;
+  background: var(--bg);
   font-weight: 600;
+  transition: background-color 0.2s ease;
 }
 
 th, td {
   padding: 12px 15px;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  transition: border-color 0.2s ease, color 0.2s ease;
 }
 
 th {
-  color: #333;
+  color: var(--text);
 }
 
 tbody tr:hover {
-  background: #f9f9f9;
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .field-name {
   font-weight: 500;
-  color: #333;
+  color: var(--text);
   min-width: 150px;
 }
 
 .field-value {
-  color: #666;
+  color: var(--muted);
   font-family: monospace;
   font-size: 13px;
   max-width: 300px;
@@ -104,7 +111,7 @@ tbody tr:hover {
 }
 
 .null {
-  color: #999;
+  color: var(--muted);
   font-style: italic;
   font-family: sans-serif;
 }
@@ -116,9 +123,12 @@ tbody tr:hover {
 .override-input {
   width: 100%;
   padding: 8px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .override-input:focus {
@@ -165,7 +175,7 @@ tbody tr:hover {
 
 .apply-btn:disabled,
 .cancel-btn:disabled {
-  background: #ccc;
+  background: var(--border);
   cursor: not-allowed;
-  color: #999;
+  color: var(--muted);
 }

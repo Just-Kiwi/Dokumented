@@ -1,21 +1,27 @@
 .schema-config {
   margin: 20px;
   padding: 20px;
-  background: #f9f9f9;
+  background: var(--surface);
   border-radius: 8px;
+  transition: background-color 0.2s ease;
 }
 
 .schema-config h2 {
   margin-top: 0;
-  color: #333;
+  color: var(--text);
+}
+
+.schema-config > p {
+  color: var(--muted);
 }
 
 .fields-list {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 15px;
   margin: 20px 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .field-row {
@@ -34,9 +40,12 @@
   flex: 1;
   min-width: 150px;
   padding: 8px 12px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 14px;
+  background: var(--surface);
+  color: var(--text);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .field-input:focus {
@@ -50,7 +59,7 @@
   align-items: center;
   gap: 5px;
   white-space: nowrap;
-  color: #666;
+  color: var(--muted);
 }
 
 .field-required input {
@@ -72,8 +81,9 @@
 }
 
 .remove-btn:disabled {
-  background: #ccc;
+  background: #777;
   cursor: not-allowed;
+  color: #ccc;
 }
 
 .schema-actions {
@@ -114,7 +124,7 @@
 
 .add-field-btn:disabled,
 .extract-btn:disabled {
-  background: #ccc;
+  background: var(--border);
   cursor: not-allowed;
-  color: #999;
+  color: var(--muted);
 }

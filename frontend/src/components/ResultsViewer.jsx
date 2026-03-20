@@ -37,7 +37,7 @@ export const ResultsViewer = ({ result, onOverridesApplied, onError }) => {
 
   return (
     <div className="results-viewer">
-      <h2>📊 Extraction Results</h2>
+      <h2>Extraction Results</h2>
 
       <div className="result-header">
         <p><strong>Filename:</strong> {result.filename}</p>
@@ -83,7 +83,7 @@ export const ResultsViewer = ({ result, onOverridesApplied, onError }) => {
             className="apply-btn"
             disabled={isApplying}
           >
-            {isApplying ? '⏳ Applying...' : '✓ Apply Overrides'}
+            {isApplying ? 'Applying...' : 'Apply Overrides'}
           </button>
           <button
             onClick={() => setOverrides({})}
