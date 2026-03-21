@@ -17,7 +17,7 @@ function App() {
 
   React.useEffect(() => {
     try {
-      const saved = localStorage.getItem('docflow-theme')
+      const saved = localStorage.getItem('dokumented-theme')
       if (saved === 'day' || saved === 'night') {
         setTheme(saved)
       }
@@ -27,7 +27,7 @@ function App() {
 
   React.useEffect(() => {
     try {
-      localStorage.setItem('docflow-theme', theme)
+      localStorage.setItem('dokumented-theme', theme)
     } catch {
     }
   }, [theme])

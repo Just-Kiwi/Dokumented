@@ -1,5 +1,5 @@
 """
-Configuration module for DocFlow.
+Configuration module for Dokumented.
 Loads environment variables from .env file.
 """
 from dotenv import load_dotenv
@@ -13,7 +13,7 @@ MERCURY_API_KEY = os.getenv('MERCURY_API_KEY', '')
 MERCURY_BASE_URL = os.getenv('MERCURY_BASE_URL', 'https://api.inceptionlabs.ai/v1')
 
 # Database
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./docflow.db')
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./dokumented.db')
 
 # Application settings
 MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))

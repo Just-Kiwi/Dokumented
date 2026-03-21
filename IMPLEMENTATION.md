@@ -1,8 +1,8 @@
-# DocFlow Implementation Summary
+# Dokumented Implementation Summary
 
 ## ✅ Project Complete
 
-The entire DocFlow intelligent document extraction system has been implemented with both **backend** and **frontend** components, including full API key configuration management accessible from the UI.
+The entire Dokumented intelligent document extraction system has been implemented with both **backend** and **frontend** components, including full API key configuration management accessible from the UI.
 
 ## 📦 What's Included
 
@@ -103,7 +103,7 @@ The entire DocFlow intelligent document extraction system has been implemented w
 ## 📁 Project Structure
 
 ```
-docflow/
+dokumented/
 ├── backend/
 │   ├── agents/              # LLM and dLLM implementations
 │   │   ├── llm_agent.py     # Claude Sonnet wrapper
@@ -170,7 +170,7 @@ docflow/
 
 ### Automated Setup (Recommended):
 ```bash
-cd docflow
+cd dokumented
 setup.bat    # Windows
 # OR
 ./setup.sh   # macOS/Linux
@@ -273,7 +273,7 @@ curl http://localhost:8000/api/config
 4. **Monitor live events** in Agent Monitor panel
 5. **Review extracted data** and apply human overrides as needed
 6. **Explore API docs** at `/docs` endpoint
-7. **Check database** (docflow.db) to see learned scripts
+7. **Check database** (dokumented.db) to see learned scripts
 
 ## 🤝 Support
 
@@ -301,6 +301,6 @@ Refer to:
 
 ---
 
-**The DocFlow system is now ready to use!** 🎉
+**The Dokumented system is now ready to use!** 🎉
 
 Start with the QUICKSTART.md guide and begin extracting structured data from documents automatically.

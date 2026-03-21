@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models for DocFlow database.
+SQLAlchemy ORM models for Dokumented database.
 """
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey, Enum
 from sqlalchemy.orm import relationship

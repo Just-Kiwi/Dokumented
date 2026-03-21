@@ -2,7 +2,7 @@
 
 echo ""
 echo "========================================"
-echo "  DocFlow Setup - macOS/Linux"
+echo "  Dokumented Setup - macOS/Linux"
 echo "========================================"
 echo ""
 
@@ -50,7 +50,7 @@ MERCURY_API_KEY=${MERCURY_KEY}
 MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1
 
 # Database
-DATABASE_URL=sqlite:///./docflow.db
+DATABASE_URL=sqlite:///./dokumented.db
 
 # Application Settings
 UPLOAD_FOLDER=./documents
@@ -85,11 +85,11 @@ echo "========================================"
 echo ""
 echo "To start the application:"
 echo ""
-echo "1. Backend (from docflow/backend):"
+echo "1. Backend (from dokumented/backend):"
 echo "   source venv/bin/activate"
 echo "   python -m uvicorn main:app --reload --port 8000"
 echo ""
-echo "2. Frontend (from docflow/frontend, in another terminal):"
+echo "2. Frontend (from dokumented/frontend, in another terminal):"
 echo "   npm run dev"
 echo ""
 echo "Backend API:        http://localhost:8000"

@@ -1,5 +1,5 @@
 """
-Pytest configuration and fixtures for DocFlow tests.
+Pytest configuration and fixtures for Dokumented tests.
 """
 import pytest
 import sys

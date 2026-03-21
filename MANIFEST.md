@@ -1,6 +1,6 @@
-# DocFlow Project Manifest
+# Dokumented Project Manifest
 
-Complete inventory of all files created for the DocFlow Intelligent Document Extraction System.
+Complete inventory of all files created for the Dokumented Intelligent Document Extraction System.
 
 ## 📚 Documentation Files
 
@@ -315,7 +315,7 @@ Complete inventory of all files created for the DocFlow Intelligent Document Ext
 ## 📊 Database
 
 Auto-created files:
-- **docflow.db** - SQLite database file (created on first run)
+- **dokumented.db** - SQLite database file (created on first run)
 
 Tables created automatically:
 - `script_library` - Format-specific extraction scripts
@@ -446,4 +446,4 @@ TOTAL PROJECT SIZE: ~96 KB (excluding node_modules and backend venv)
 ---
 
 *Generated: March 19, 2026*
-*DocFlow v1.0.0 - Intelligent Document Extraction System*
+*Dokumented v1.0.0 - Intelligent Document Extraction System*

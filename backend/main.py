@@ -1,20 +1,24 @@
 """
-FastAPI application for DocFlow.
+FastAPI application for Dokumented.
 Main entry point with all routes and WebSocket support.
 """
 import json
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from db.database import get_db, init_db
 from db.models import ExtractionResult, ScriptLibrary, AppConfig
 from models.schemas import (
     ConfigUpdate, ConfigResponse, SchemaRequest, ExtractRequest,
-    HumanOverridesRequest, ExtractionReportResponse, WSEvent
+    HumanOverridesRequest, ExtractionReportResponse, WSEvent,
+    CreditCheckResponse, CreditCheckStatus
 )
 from services.pipeline import ExtractionPipeline
 from parsers.doc_parser import DocumentParser
-from config import UPLOAD_FOLDER
+from config import UPLOAD_FOLDER, ANTHROPIC_API_KEY, MERCURY_API_KEY, MERCURY_BASE_URL
+from exceptions import AnthropicCreditError, MercuryCreditError, APIError
+import anthropic
+from openai import OpenAI
 import os
 import asyncio
 from datetime import datetime
@@ -23,7 +27,7 @@ from typing import Dict, List, Optional
 # Initialize database
 init_db()
 
-app = FastAPI(title="DocFlow", version="1.0.0")
+app = FastAPI(title="Dokumented", version="1.0.0")
 
 # CORS
 app.add_middleware(
@@ -138,6 +142,111 @@ def list_config(db: Session = Depends(get_db)):
 
 
 # ============================================================================
+# CREDIT CHECK ENDPOINTS
+# ============================================================================
+
+@app.get("/api/credits", response_model=CreditCheckResponse)
+def check_credits(db: Session = Depends(get_db)):
+    """
+    Check if API keys are configured and have valid credits.
+    Makes minimal test API calls to verify credits are available.
+    """
+    def check_anthropic():
+        """Check Anthropic API credits."""
+        # First check if key is configured in DB or env
+        llm_config = db.query(AppConfig).filter_by(key="ANTHROPIC_API_KEY").first()
+        api_key = llm_config.value if llm_config and llm_config.value else ANTHROPIC_API_KEY
+        
+        if not api_key:
+            return CreditCheckStatus(
+                provider="Anthropic",
+                configured=False,
+                has_credits=False,
+                error="API key not configured"
+            )
+        
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            # Use cheapest model for test
+            client.messages.create(
+                model="claude-3-haiku-4-20250514",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "hi"}]
+            )
+            return CreditCheckStatus(
+                provider="Anthropic",
+                configured=True,
+                has_credits=True
+            )
+        except Exception as e:
+            error_str = str(e).lower()
+            if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                return CreditCheckStatus(
+                    provider="Anthropic",
+                    configured=True,
+                    has_credits=False,
+                    error="Insufficient credits. Add credits to continue."
+                )
+            return CreditCheckStatus(
+                provider="Anthropic",
+                configured=True,
+                has_credits=False,
+                error=str(e)
+            )
+    
+    def check_mercury():
+        """Check Mercury/Inception Labs API credits."""
+        # First check if key is configured in DB or env
+        dllm_config = db.query(AppConfig).filter_by(key="MERCURY_API_KEY").first()
+        api_key = dllm_config.value if dllm_config and dllm_config.value else MERCURY_API_KEY
+        
+        url_config = db.query(AppConfig).filter_by(key="MERCURY_BASE_URL").first()
+        base_url = url_config.value if url_config and url_config.value else MERCURY_BASE_URL
+        
+        if not api_key:
+            return CreditCheckStatus(
+                provider="Mercury/Inception Labs",
+                configured=False,
+                has_credits=False,
+                error="API key not configured"
+            )
+        
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url)
+            # Mercury is free for small prompts
+            client.chat.completions.create(
+                model="mercury-coder-small-20b",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "hello"}]
+            )
+            return CreditCheckStatus(
+                provider="Mercury/Inception Labs",
+                configured=True,
+                has_credits=True
+            )
+        except Exception as e:
+            error_str = str(e).lower()
+            if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                return CreditCheckStatus(
+                    provider="Mercury/Inception Labs",
+                    configured=True,
+                    has_credits=False,
+                    error="Insufficient credits. Add credits to continue."
+                )
+            return CreditCheckStatus(
+                provider="Mercury/Inception Labs",
+                configured=True,
+                has_credits=False,
+                error=str(e)
+            )
+    
+    return CreditCheckResponse(
+        anthropic=check_anthropic(),
+        mercury=check_mercury()
+    )
+
+
+# ============================================================================
 # EXTRACTION ENDPOINTS
 # ============================================================================
 
@@ -208,6 +317,36 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
         )
         
         return {"result_id": result_id, "status": "started"}
+    except AnthropicCreditError as e:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "Anthropic API (Claude) has insufficient credits",
+                "message": e.message,
+                "provider": e.provider,
+                "suggestion": "Add credits to continue"
+            }
+        )
+    except MercuryCreditError as e:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "Mercury/Inception Labs API has insufficient credits",
+                "message": e.message,
+                "provider": e.provider,
+                "suggestion": "Add credits to continue"
+            }
+        )
+    except APIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": f"{e.provider} API error",
+                "message": e.message,
+                "provider": e.provider,
+                "suggestion": "Add credits to continue"
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction error: {str(e)}")
 
@@ -319,7 +458,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "service": "DocFlow API"}
+    return {"status": "ok", "service": "Dokumented API"}
 
 
 if __name__ == "__main__":

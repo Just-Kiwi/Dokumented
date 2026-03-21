@@ -2,9 +2,11 @@
 dLLM Agent using Mercury 2 for field validation.
 """
 from openai import OpenAI
+from openai import APIError as OpenAIAPIError, AuthenticationError as OpenAIAuthError
 from config import MERCURY_API_KEY, MERCURY_BASE_URL
 import json
 from typing import Optional, Dict, List
+from exceptions import MercuryCreditError
 
 
 class dLLMChecker:
@@ -73,7 +75,11 @@ Return valid JSON ONLY (no markdown, no code blocks):
                 temperature=0.3
             )
             
-            response_text = message.choices[0].message.content.strip()
+            response_text = message.choices[0].message.content
+            if response_text:
+                response_text = response_text.strip()
+            else:
+                raise MercuryCreditError("Empty response from Mercury API")
             
             # Clean up response if it has markdown code blocks
             if response_text.startswith("```"):
@@ -84,6 +90,11 @@ Return valid JSON ONLY (no markdown, no code blocks):
             
             report = json.loads(response_text)
             return report
+        except OpenAIAPIError as e:
+            error_str = str(e).lower()
+            if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                raise MercuryCreditError(str(e))
+            raise
         except json.JSONDecodeError:
             # Fallback: return a basic report if parsing fails
             return {

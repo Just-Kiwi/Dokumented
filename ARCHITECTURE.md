@@ -1,4 +1,4 @@
-# DocFlow System Diagram
+# Dokumented System Diagram
 
 ## System Architecture
 

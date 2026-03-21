@@ -1,7 +1,7 @@
 @echo off
 echo.
 echo ========================================
-echo   DocFlow Setup - Windows
+echo   Dokumented Setup - Windows
 echo ========================================
 echo.
 
@@ -50,7 +50,7 @@ if not exist .env (
         echo MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1
         echo.
         echo # Database
-        echo DATABASE_URL=sqlite:///./docflow.db
+        echo DATABASE_URL=sqlite:///./dokumented.db
         echo.
         echo # Application Settings
         echo UPLOAD_FOLDER=./documents
@@ -84,11 +84,11 @@ echo ========================================
 echo.
 echo To start the application:
 echo.
-echo 1. Backend (from docflow/backend):
+echo 1. Backend (from dokumented/backend):
 echo    venv\Scripts\activate
 echo    python -m uvicorn main:app --reload --port 8000
 echo.
-echo 2. Frontend (from docflow/frontend, in another terminal):
+echo 2. Frontend (from dokumented/frontend, in another terminal):
 echo    npm run dev
 echo.
 echo Backend API:        http://localhost:8000

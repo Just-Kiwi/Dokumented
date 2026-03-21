@@ -88,3 +88,18 @@ class WSEvent(BaseModel):
     """WebSocket event sent to client."""
     event: str
     data: Optional[Dict[str, Any]] = None
+
+
+# Credit check schemas
+class CreditCheckStatus(BaseModel):
+    """Status of a single API's credits."""
+    provider: str
+    configured: bool
+    has_credits: bool
+    error: Optional[str] = None
+
+
+class CreditCheckResponse(BaseModel):
+    """Response from credit check endpoint."""
+    anthropic: CreditCheckStatus
+    mercury: CreditCheckStatus

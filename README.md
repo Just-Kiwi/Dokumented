@@ -101,7 +101,7 @@ Frontend available at: http://localhost:5173
 ## Project Structure
 
 ```
-docflow/
+dokumented/
 ├── backend/
 │   ├── agents/              # LLM and dLLM implementations
 │   ├── db/                  # Database models and connection
@@ -139,7 +139,7 @@ docflow/
 
 ## Database
 
-SQLite db automatically created at `docflow.db` with these tables:
+SQLite db automatically created at `dokumented.db` with these tables:
 - `script_library` - Format-specific extraction scripts
 - `extraction_results` - Processed documents
 - `retry_log` - Retry attempts and outcomes

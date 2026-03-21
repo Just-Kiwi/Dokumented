@@ -4,13 +4,13 @@
 
 ### Windows:
 ```bash
-cd docflow
+cd dokumented
 setup.bat
 ```
 
 ### macOS/Linux:
 ```bash
-cd docflow
+cd dokumented
 chmod +x setup.sh
 ./setup.sh
 ```
@@ -70,7 +70,7 @@ npm run dev
 4. Click **Check Configuration** to verify
 5. Click **Save Configuration**
 
-Keys are stored in the SQLite database (`docflow.db`).
+Keys are stored in the SQLite database (`dokumented.db`).
 
 ## Workflow:
 

@@ -14,7 +14,7 @@ class TestHealthEndpoint:
         """Test health check returns OK."""
         response = health_check()
         assert response["status"] == "ok"
-        assert response["service"] == "DocFlow API"
+        assert response["service"] == "Dokumented API"
 
 
 class TestConfigEndpoints:

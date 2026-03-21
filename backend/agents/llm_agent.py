@@ -2,9 +2,11 @@
 LLM Agent using Claude Sonnet for fingerprinting and script generation.
 """
 import anthropic
+from anthropic import APIError as AnthropicAPIError, RateLimitError, AuthenticationError
 from config import ANTHROPIC_API_KEY
 import json
 from typing import Tuple, Optional
+from exceptions import AnthropicCreditError, APITimeoutError, APIAuthenticationError
 
 
 class LLMAgent:
@@ -34,14 +36,19 @@ Document text (first 1000 chars):
 
 Return ONLY the fingerprint string, nothing else."""
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=50,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        fingerprint = message.content[0].text.strip().lower()
-        return fingerprint
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=50,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            fingerprint = message.content[0].text.strip().lower()
+            return fingerprint
+        except AnthropicAPIError as e:
+            if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
+                raise AnthropicCreditError(str(e))
+            raise
 
     def write_script(self, raw_text: str, schema: list, fingerprint: str) -> str:
         """
@@ -86,22 +93,27 @@ result = {{
 
 Write only the Python script, no explanation."""
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        script = message.content[0].text.strip()
-        # Remove markdown code blocks if present
-        if script.startswith("```python"):
-            script = script[9:]
-        if script.startswith("```"):
-            script = script[3:]
-        if script.endswith("```"):
-            script = script[:-3]
-        
-        return script.strip()
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            script = message.content[0].text.strip()
+            # Remove markdown code blocks if present
+            if script.startswith("```python"):
+                script = script[9:]
+            if script.startswith("```"):
+                script = script[3:]
+            if script.endswith("```"):
+                script = script[:-3]
+            
+            return script.strip()
+        except AnthropicAPIError as e:
+            if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
+                raise AnthropicCreditError(str(e))
+            raise
 
     def revise_script(self, script_body: str, raw_text: str, schema: list, 
                      missing_fields: list, attempt: int) -> str:
@@ -142,19 +154,24 @@ Requirements:
 
 Revised script:"""
 
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        script = message.content[0].text.strip()
-        # Remove markdown code blocks if present
-        if script.startswith("```python"):
-            script = script[9:]
-        if script.startswith("```"):
-            script = script[3:]
-        if script.endswith("```"):
-            script = script[:-3]
-        
-        return script.strip()
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            script = message.content[0].text.strip()
+            # Remove markdown code blocks if present
+            if script.startswith("```python"):
+                script = script[9:]
+            if script.startswith("```"):
+                script = script[3:]
+            if script.endswith("```"):
+                script = script[:-3]
+            
+            return script.strip()
+        except AnthropicAPIError as e:
+            if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
+                raise AnthropicCreditError(str(e))
+            raise

@@ -1,4 +1,4 @@
-# Developer Guide - DocFlow
+# Developer Guide - Dokumented
 
 ## Architecture Overview
 
@@ -174,7 +174,7 @@ MERCURY_BASE_URL           # Default: https://api.inceptionlabs.ai/v1
 
 ### Optional
 ```
-DATABASE_URL               # Default: sqlite:///./docflow.db
+DATABASE_URL               # Default: sqlite:///./dokumented.db
 UPLOAD_FOLDER              # Default: ./documents
 MAX_RETRIES                # Default: 3
 CONFIDENCE_THRESHOLD       # Default: 0.75
