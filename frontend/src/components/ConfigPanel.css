@@ -222,45 +222,10 @@
   text-decoration: underline;
 }
 
-/* Environment Notice */
-.env-notice {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.env-icon {
-  font-size: 24px;
-  line-height: 1;
-}
-
-.env-notice p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.env-notice strong {
-  color: white;
-}
-
-.env-notice code {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: monospace;
-  font-size: 12px;
-}
-
 /* Config Value Display */
 .config-value {
   padding: 12px;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-family: monospace;
@@ -374,14 +339,10 @@
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
-  .env-notice {
-    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
-  }
-  
   .config-value,
   .settings-list,
   .config-info pre {
-    background: #1a1a2e;
-    border-color: #333;
+    background: var(--surface);
+    border-color: var(--border);
   }
 }
