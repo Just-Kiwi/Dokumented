@@ -1,61 +1,62 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import './ConfigPanel.css'
-import { setConfig, getConfig } from '../api'
+import { listConfig, getConfig } from '../api'
 
 export const ConfigPanel = ({ isOpen, onClose }) => {
-  const [llmKey, setLlmKey] = useState('')
-  const [dllmKey, setDllmKey] = useState('')
-  const [dllmUrl, setDllmUrl] = useState('https://api.inceptionlabs.ai/v1')
+  const [config, setConfig] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [keyStatus, setKeyStatus] = useState({
-    llm: false,
-    dllm: false
-  })
+  const [creditStatus, setCreditStatus] = useState(null)
 
-  const handleSaveConfig = async () => {
+  useEffect(() => {
+    if (isOpen) {
+      loadConfig()
+    }
+  }, [isOpen])
+
+  const loadConfig = async () => {
     setIsLoading(true)
-    setMessage('')
-
     try {
-      if (llmKey) {
-        await setConfig('ANTHROPIC_API_KEY', llmKey)
-      }
-      if (dllmKey) {
-        await setConfig('MERCURY_API_KEY', dllmKey)
-      }
-      if (dllmUrl) {
-        await setConfig('MERCURY_BASE_URL', dllmUrl)
-      }
-
-      setMessage('Configuration saved successfully!')
-      setTimeout(() => {
-        setLlmKey('')
-        setDllmKey('')
-        setMessage('')
-      }, 2000)
+      const response = await listConfig()
+      setConfig(response.data)
     } catch (error) {
-      setMessage(`Error saving configuration: ${error.message}`)
+      setMessage('Error loading configuration')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleCheckConfig = async () => {
+  const handleCheckCredits = async () => {
     setIsLoading(true)
-    setKeyStatus({ llm: false, dllm: false })
+    setCreditStatus(null)
+    setMessage('')
 
     try {
-      const checkLlm = await getConfig('ANTHROPIC_API_KEY').catch(() => null)
-      const checkDllm = await getConfig('MERCURY_API_KEY').catch(() => null)
-
-      setKeyStatus({
-        llm: !!checkLlm?.data?.value,
-        dllm: !!checkDllm?.data?.value
-      })
-
-      setMessage('Configuration check complete')
-      setTimeout(() => setMessage(''), 2000)
+      const response = await getConfig('ANTHROPIC_API_KEY')
+      if (response.data.configured) {
+        setCreditStatus({
+          anthropic: 'checking...',
+          mercury: 'checking...'
+        })
+      } else {
+        setMessage('API keys not configured. Set them in backend/.env file.')
+        setIsLoading(false)
+        return
+      }
+      
+      const configResponse = await listConfig()
+      const mercuryKeyConfigured = configResponse.data?.MERCURY_API_KEY?.configured
+      
+      if (mercuryKeyConfigured) {
+        setCreditStatus({
+          anthropic: 'configured',
+          mercury: 'configured'
+        })
+        setMessage('API keys are configured. Credits will be verified when you run an extraction.')
+      } else {
+        setCreditStatus({ anthropic: 'configured' })
+        setMessage('Anthropic key configured. Set MERCURY_API_KEY in backend/.env')
+      }
     } catch (error) {
       setMessage(`Error checking configuration: ${error.message}`)
     } finally {
@@ -74,75 +75,120 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
         </div>
 
         <div className="config-content">
-          <div className="config-section">
-            <label>LLM API Key (Claude Sonnet)</label>
-            <input
-              type="password"
-              value={llmKey}
-              onChange={(e) => setLlmKey(e.target.value)}
-              placeholder="sk-ant-..."
-              disabled={isLoading}
-            />
-            <p className="hint">Leave empty to keep existing key</p>
-            {keyStatus.llm && <p className="status-text">Key configured</p>}
+          <div className="env-notice">
+            <span className="env-icon">🔒</span>
+            <p>
+              <strong>Security:</strong> API keys are stored in <code>backend/.env</code> file only.
+              They are never stored in the database.
+            </p>
           </div>
 
           <div className="config-section">
-            <label>dLLM API Key (Mercury 2)</label>
-            <input
-              type="password"
-              value={dllmKey}
-              onChange={(e) => setDllmKey(e.target.value)}
-              placeholder="your-mercury-key..."
-              disabled={isLoading}
-            />
-            <p className="hint">Leave empty to keep existing key</p>
-            {keyStatus.dllm && <p className="status-text">Key configured</p>}
+            <label>Anthropic API Key (Claude Sonnet)</label>
+            <div className="config-value">
+              {config.ANTHROPIC_API_KEY?.configured ? (
+                <span className="key-configured">
+                  <span className="check-icon">✓</span>
+                  {config.ANTHROPIC_API_KEY.value}
+                </span>
+              ) : (
+                <span className="key-not-configured">
+                  <span className="x-icon">✗</span>
+                  Not configured
+                </span>
+              )}
+            </div>
+            <p className="hint">Set <code>ANTHROPIC_API_KEY</code> in <code>backend/.env</code></p>
           </div>
 
           <div className="config-section">
-            <label>dLLM Base URL (Mercury 2)</label>
-            <input
-              type="text"
-              value={dllmUrl}
-              onChange={(e) => setDllmUrl(e.target.value)}
-              placeholder="https://api.inceptionlabs.ai/v1"
-              disabled={isLoading}
-            />
-            <p className="hint">Default: https://api.inceptionlabs.ai/v1</p>
+            <label>Mercury API Key (Mercury 2)</label>
+            <div className="config-value">
+              {config.MERCURY_API_KEY?.configured ? (
+                <span className="key-configured">
+                  <span className="check-icon">✓</span>
+                  {config.MERCURY_API_KEY.value}
+                </span>
+              ) : (
+                <span className="key-not-configured">
+                  <span className="x-icon">✗</span>
+                  Not configured
+                </span>
+              )}
+            </div>
+            <p className="hint">Set <code>MERCURY_API_KEY</code> in <code>backend/.env</code></p>
+          </div>
+
+          <div className="config-section">
+            <label>Mercury Base URL</label>
+            <div className="config-value">
+              {config.MERCURY_BASE_URL?.value || 'https://api.inceptionlabs.ai/v1'}
+            </div>
+            <p className="hint">Set <code>MERCURY_BASE_URL</code> in <code>backend/.env</code> to override</p>
+          </div>
+
+          <div className="config-section">
+            <label>Application Settings</label>
+            <div className="settings-list">
+              <div className="setting-item">
+                <span className="setting-name">Max Retries:</span>
+                <span className="setting-value">{config.MAX_RETRIES?.value || '3'}</span>
+              </div>
+              <div className="setting-item">
+                <span className="setting-name">Confidence Threshold:</span>
+                <span className="setting-value">{config.CONFIDENCE_THRESHOLD?.value || '0.75'}</span>
+              </div>
+              <div className="setting-item">
+                <span className="setting-name">Database:</span>
+                <span className="setting-value db-path">{config.DATABASE_URL?.value || 'sqlite:///./dokumented.db'}</span>
+              </div>
+            </div>
+            <p className="hint">Edit these values in <code>backend/.env</code></p>
           </div>
 
           {message && (
-            <div className={`message ${message.includes('Error') ? 'error' : 'success'}`}>
+            <div className={`message ${message.includes('Error') || message.includes('Not configured') || message.includes('not configured') ? 'error' : 'success'}`}>
               {message}
             </div>
           )}
 
           <div className="config-actions">
             <button
-              onClick={handleCheckConfig}
+              onClick={handleCheckCredits}
               className="check-btn"
               disabled={isLoading}
             >
               {isLoading ? 'Checking...' : 'Check Configuration'}
             </button>
             <button
-              onClick={handleSaveConfig}
-              className="save-btn"
-              disabled={isLoading || (!llmKey && !dllmKey)}
+              onClick={loadConfig}
+              className="refresh-btn"
+              disabled={isLoading}
             >
-              {isLoading ? 'Saving...' : 'Save Configuration'}
+              Refresh
             </button>
             <button
               onClick={onClose}
               className="cancel-btn"
               disabled={isLoading}
             >
-              Cancel
+              Done
             </button>
           </div>
 
           <div className="config-info">
+            <h3>How to Configure</h3>
+            <ol>
+              <li>Edit the <code>backend/.env</code> file</li>
+              <li>Add your API keys:
+                <pre>
+{`ANTHROPIC_API_KEY=sk-ant-your-key
+MERCURY_API_KEY=your-mercury-key`}
+                </pre>
+              </li>
+              <li>Restart the backend server</li>
+              <li>Click "Check Configuration" to verify</li>
+            </ol>
             <h3>API Documentation</h3>
             <ul>
               <li>

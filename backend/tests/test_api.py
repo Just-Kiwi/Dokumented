@@ -2,9 +2,10 @@
 Tests for API endpoints using direct function calls instead of TestClient.
 """
 import pytest
-from db.models import AppConfig, ScriptLibrary, ExtractionResult, StatusEnum
-from main import app, set_config, get_config, list_config, get_script, list_scripts, get_extraction, health_check
+from db.models import ScriptLibrary, ExtractionResult, StatusEnum
+from main import health_check, list_config, get_config_by_key, get_script, list_scripts, get_extraction
 from fastapi import HTTPException
+from config import get_config, mask_api_key
 
 
 class TestHealthEndpoint:
@@ -18,48 +19,69 @@ class TestHealthEndpoint:
 
 
 class TestConfigEndpoints:
-    """Tests for configuration endpoints."""
+    """Tests for configuration endpoints from .env."""
 
-    def test_set_config(self, test_db):
-        """Test setting a configuration value."""
-        from models.schemas import ConfigUpdate
-        update = ConfigUpdate(key="ANTHROPIC_API_KEY", value="sk-ant-test")
-        result = set_config(update, test_db)
-        assert result.key == "ANTHROPIC_API_KEY"
-        assert result.value == "sk-ant-test"
-
-    def test_set_config_invalid_key(self, test_db):
-        """Test setting an invalid config key."""
-        from models.schemas import ConfigUpdate
-        update = ConfigUpdate(key="INVALID_KEY", value="some-value")
-        with pytest.raises(HTTPException) as exc_info:
-            set_config(update, test_db)
-        assert exc_info.value.status_code == 400
-        assert "not allowed" in str(exc_info.value.detail)
-
-    def test_get_config(self, test_db, sample_config):
-        """Test getting a specific config value."""
-        result = get_config("ANTHROPIC_API_KEY", test_db)
-        assert result.key == "ANTHROPIC_API_KEY"
-
-    def test_get_config_invalid_key(self, test_db):
-        """Test getting an invalid config key."""
-        with pytest.raises(HTTPException) as exc_info:
-            get_config("INVALID_KEY", test_db)
-        assert exc_info.value.status_code == 400
-        assert "not allowed" in str(exc_info.value.detail)
-
-    def test_list_config(self, test_db, sample_config):
-        """Test listing all configurations."""
-        result = list_config(test_db)
+    def test_list_config_returns_all_keys(self):
+        """Test listing all configurations from .env."""
+        result = list_config()
         assert "ANTHROPIC_API_KEY" in result
         assert "MERCURY_API_KEY" in result
+        assert "MERCURY_BASE_URL" in result
+        assert "MAX_RETRIES" in result
+        assert "CONFIDENCE_THRESHOLD" in result
 
-    def test_list_config_hides_api_key_values(self, test_db, sample_config):
-        """Test that API key values are not exposed in list."""
-        result = list_config(test_db)
-        assert result["ANTHROPIC_API_KEY"]["exists"] is True
-        assert "value" not in result["ANTHROPIC_API_KEY"]
+    def test_list_config_shows_source(self):
+        """Test that config shows source as 'environment'."""
+        result = list_config()
+        for key in result:
+            assert result[key]["source"] == "environment"
+
+    def test_list_config_api_keys_masked(self):
+        """Test that API keys are masked for security."""
+        result = list_config()
+        anthropic = result.get("ANTHROPIC_API_KEY", {})
+        mercury = result.get("MERCURY_API_KEY", {})
+        
+        if anthropic.get("configured"):
+            value = anthropic.get("value", "")
+            assert "..." in value or "*" in value or len(value) <= 12
+        if mercury.get("configured"):
+            value = mercury.get("value", "")
+            assert "..." in value or "*" in value or len(value) <= 12
+
+    def test_get_config_by_key_valid(self):
+        """Test getting a specific config value."""
+        result = get_config_by_key("MAX_RETRIES")
+        assert "value" in result
+        assert "configured" in result
+        assert result["source"] == "environment"
+
+    def test_get_config_by_key_invalid(self):
+        """Test getting an invalid config key."""
+        with pytest.raises(HTTPException) as exc_info:
+            get_config_by_key("INVALID_KEY")
+        assert exc_info.value.status_code == 404
+
+
+class TestMaskApiKey:
+    """Tests for API key masking utility."""
+
+    def test_mask_short_key(self):
+        """Test masking a key shorter than 12 chars."""
+        result = mask_api_key("abc")
+        assert result == "***"
+
+    def test_mask_long_key(self):
+        """Test masking a key longer than 12 chars."""
+        result = mask_api_key("sk-ant-1234567890abcdef")
+        assert result.startswith("sk-ant-1")
+        assert "..." in result
+        assert result.endswith("cdef")
+
+    def test_mask_empty_key(self):
+        """Test masking an empty key."""
+        result = mask_api_key("")
+        assert result == ""
 
 
 class TestScriptEndpoints:

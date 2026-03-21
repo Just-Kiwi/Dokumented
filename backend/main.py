@@ -7,15 +7,18 @@ from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from db.database import get_db, init_db
-from db.models import ExtractionResult, ScriptLibrary, AppConfig
+from db.models import ExtractionResult, ScriptLibrary
 from models.schemas import (
-    ConfigUpdate, ConfigResponse, SchemaRequest, ExtractRequest,
+    SchemaRequest, ExtractRequest,
     HumanOverridesRequest, ExtractionReportResponse, WSEvent,
     CreditCheckResponse, CreditCheckStatus
 )
 from services.pipeline import ExtractionPipeline
 from parsers.doc_parser import DocumentParser
-from config import UPLOAD_FOLDER, ANTHROPIC_API_KEY, MERCURY_API_KEY, MERCURY_BASE_URL
+from config import (
+    UPLOAD_FOLDER, ANTHROPIC_API_KEY, MERCURY_API_KEY, MERCURY_BASE_URL,
+    MAX_RETRIES, CONFIDENCE_THRESHOLD, get_config, mask_api_key
+)
 from exceptions import AnthropicCreditError, MercuryCreditError, APIError
 import anthropic
 from openai import OpenAI
@@ -73,72 +76,27 @@ def emit_event(event: dict):
 # CONFIG ENDPOINTS
 # ============================================================================
 
-@app.post("/api/config", response_model=ConfigResponse)
-def set_config(update: ConfigUpdate, db: Session = Depends(get_db)):
-    """Set a configuration value (API keys, settings)."""
-    
-    # Restricted keys that can be set
-    allowed_keys = [
-        "ANTHROPIC_API_KEY",
-        "MERCURY_API_KEY",
-        "MERCURY_BASE_URL",
-        "MAX_RETRIES",
-        "CONFIDENCE_THRESHOLD"
-    ]
-    
-    if update.key not in allowed_keys:
-        raise HTTPException(status_code=400, detail=f"Key '{update.key}' not allowed")
-
-    # Check if exists
-    config = db.query(AppConfig).filter_by(key=update.key).first()
-    if config:
-        config.value = update.value
-        config.updated_at = datetime.utcnow()
-    else:
-        config = AppConfig(key=update.key, value=update.value)
-        db.add(config)
-
-    db.commit()
-    db.refresh(config)
-    return config
-
-
-@app.get("/api/config/{key}", response_model=ConfigResponse)
-def get_config(key: str, db: Session = Depends(get_db)):
-    """Get a configuration value."""
-    allowed_keys = [
-        "ANTHROPIC_API_KEY",
-        "MERCURY_API_KEY",
-        "MERCURY_BASE_URL",
-        "MAX_RETRIES",
-        "CONFIDENCE_THRESHOLD"
-    ]
-    
-    if key not in allowed_keys:
-        raise HTTPException(status_code=400, detail=f"Key '{key}' not allowed")
-    
-    config = db.query(AppConfig).filter_by(key=key).first()
-    if not config:
-        raise HTTPException(status_code=404, detail=f"Config '{key}' not found")
-    return config
-
-
 @app.get("/api/config")
-def list_config(db: Session = Depends(get_db)):
-    """List all configuration values (excluding sensitive keys)."""
-    configs = db.query(AppConfig).all()
-    safe_configs = {}
+def list_config():
+    """
+    List all configuration values from .env file.
+    API keys are masked for security.
+    """
+    return get_config()
+
+
+@app.get("/api/config/{key}")
+def get_config_by_key(key: str):
+    """
+    Get a specific configuration value from .env file.
+    API keys are masked for security.
+    """
+    config = get_config()
     
-    # Don't return API key values, only confirm they exist
-    sensitive_keys = ["ANTHROPIC_API_KEY", "MERCURY_API_KEY"]
+    if key not in config:
+        raise HTTPException(status_code=404, detail=f"Config '{key}' not found")
     
-    for config in configs:
-        if config.key in sensitive_keys:
-            safe_configs[config.key] = {"exists": bool(config.value), "updated_at": config.updated_at}
-        else:
-            safe_configs[config.key] = {"value": config.value, "updated_at": config.updated_at}
-    
-    return safe_configs
+    return config[key]
 
 
 # ============================================================================
@@ -146,28 +104,25 @@ def list_config(db: Session = Depends(get_db)):
 # ============================================================================
 
 @app.get("/api/credits", response_model=CreditCheckResponse)
-def check_credits(db: Session = Depends(get_db)):
+def check_credits():
     """
-    Check if API keys are configured and have valid credits.
+    Check if API keys are configured in .env and have valid credits.
     Makes minimal test API calls to verify credits are available.
     """
     def check_anthropic():
         """Check Anthropic API credits."""
-        # First check if key is configured in DB or env
-        llm_config = db.query(AppConfig).filter_by(key="ANTHROPIC_API_KEY").first()
-        api_key = llm_config.value if llm_config and llm_config.value else ANTHROPIC_API_KEY
+        api_key = ANTHROPIC_API_KEY
         
         if not api_key:
             return CreditCheckStatus(
                 provider="Anthropic",
                 configured=False,
                 has_credits=False,
-                error="API key not configured"
+                error="API key not configured. Set ANTHROPIC_API_KEY in .env file."
             )
         
         try:
             client = anthropic.Anthropic(api_key=api_key)
-            # Use cheapest model for test
             client.messages.create(
                 model="claude-3-haiku-4-20250514",
                 max_tokens=10,
@@ -196,26 +151,21 @@ def check_credits(db: Session = Depends(get_db)):
     
     def check_mercury():
         """Check Mercury/Inception Labs API credits."""
-        # First check if key is configured in DB or env
-        dllm_config = db.query(AppConfig).filter_by(key="MERCURY_API_KEY").first()
-        api_key = dllm_config.value if dllm_config and dllm_config.value else MERCURY_API_KEY
-        
-        url_config = db.query(AppConfig).filter_by(key="MERCURY_BASE_URL").first()
-        base_url = url_config.value if url_config and url_config.value else MERCURY_BASE_URL
+        api_key = MERCURY_API_KEY
+        base_url = MERCURY_BASE_URL
         
         if not api_key:
             return CreditCheckStatus(
                 provider="Mercury/Inception Labs",
                 configured=False,
                 has_credits=False,
-                error="API key not configured"
+                error="API key not configured. Set MERCURY_API_KEY in .env file."
             )
         
         try:
             client = OpenAI(api_key=api_key, base_url=base_url)
-            # Mercury is free for small prompts
             client.chat.completions.create(
-                model="mercury-coder-small-20b",
+                model="mercury-2",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "hello"}]
             )
@@ -279,22 +229,23 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
     """Extract fields from a document."""
     
-    # Get API keys from config or use defaults
-    llm_key = None
-    dllm_key = None
-    dllm_url = None
+    # Get API keys from .env (never from database for security)
+    llm_key = ANTHROPIC_API_KEY
+    dllm_key = MERCURY_API_KEY
+    dllm_url = MERCURY_BASE_URL
     
-    llm_config = db.query(AppConfig).filter_by(key="ANTHROPIC_API_KEY").first()
-    if llm_config and llm_config.value:
-        llm_key = llm_config.value
+    # Validate keys are configured
+    if not llm_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ANTHROPIC_API_KEY not configured. Set it in .env file."
+        )
     
-    dllm_config = db.query(AppConfig).filter_by(key="MERCURY_API_KEY").first()
-    if dllm_config and dllm_config.value:
-        dllm_key = dllm_config.value
-    
-    url_config = db.query(AppConfig).filter_by(key="MERCURY_BASE_URL").first()
-    if url_config:
-        dllm_url = url_config.value
+    if not dllm_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MERCURY_API_KEY not configured. Set it in .env file."
+        )
     
     # Create pipeline
     pipeline = ExtractionPipeline(

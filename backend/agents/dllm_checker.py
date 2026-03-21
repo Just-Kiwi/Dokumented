@@ -17,7 +17,7 @@ class dLLMChecker:
         key = api_key or MERCURY_API_KEY
         url = base_url or MERCURY_BASE_URL
         self.client = OpenAI(api_key=key, base_url=url)
-        self.model = "mercury-coder-small-20b"
+        self.model = "mercury-2"
 
     def check_fields(self, raw_text: str, extracted_json: Dict, schema: List[Dict]) -> Dict:
         """

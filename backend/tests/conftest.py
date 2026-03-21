@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import Base
-from db.models import AppConfig, ScriptLibrary, ExtractionResult, RetryLog, StatusEnum
+from db.models import ScriptLibrary, ExtractionResult, RetryLog, StatusEnum
 
 
 @pytest.fixture(scope="function")
@@ -144,22 +144,6 @@ def sample_extracted_json():
         "total_amount": "$1,375.00",
         "due_date": "February 15, 2024",
     }
-
-
-@pytest.fixture
-def sample_config(test_db):
-    """Create sample config entries in test database."""
-    configs = [
-        AppConfig(key="ANTHROPIC_API_KEY", value="sk-ant-test-key"),
-        AppConfig(key="MERCURY_API_KEY", value="test-mercury-key"),
-        AppConfig(key="MERCURY_BASE_URL", value="https://api.inceptionlabs.ai/v1"),
-        AppConfig(key="MAX_RETRIES", value="3"),
-        AppConfig(key="CONFIDENCE_THRESHOLD", value="0.75"),
-    ]
-    for config in configs:
-        test_db.add(config)
-    test_db.commit()
-    return configs
 
 
 @pytest.fixture
