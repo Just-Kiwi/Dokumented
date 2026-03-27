@@ -128,3 +128,131 @@
 .agent-monitor.collapsed .monitor-content {
   display: none;
 }
+
+.monitor-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 15px;
+  border-bottom: 2px solid var(--border);
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: #2196F3;
+}
+
+.validation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.validation-summary {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+.summary-item {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.summary-item.filled {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4CAF50;
+}
+
+.summary-item.missing {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.summary-item.uncertain {
+  background: rgba(255, 152, 0, 0.2);
+  color: #FF9800;
+}
+
+.validation-table {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.validation-table-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 1fr 120px;
+  gap: 10px;
+  padding: 12px 15px;
+  background: var(--header-bg);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--header-text);
+}
+
+.validation-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 1fr 120px;
+  gap: 10px;
+  padding: 10px 15px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  align-items: center;
+}
+
+.field-name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.field-status {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.field-value {
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confidence-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confidence-bar {
+  height: 6px;
+  border-radius: 3px;
+  min-width: 20px;
+}
+
+.confidence-text {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 35px;
+}
+
+.loading, .no-data {
+  color: var(--muted);
+  text-align: center;
+  padding: 20px;
+}

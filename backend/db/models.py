@@ -50,6 +50,7 @@ class ExtractionResult(Base):
     raw_text = Column(Text, nullable=False)
     extracted_json = Column(JSON, nullable=False)
     human_overrides = Column(JSON, default={})
+    dllm_report = Column(JSON, default={})
     status = Column(Enum(StatusEnum), default=StatusEnum.complete)
     created_at = Column(DateTime, default=datetime.utcnow)
 

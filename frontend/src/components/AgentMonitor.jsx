@@ -1,10 +1,14 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import useWebSocket from '../hooks/useWebSocket'
+import { getValidationLog } from '../api'
 import './AgentMonitor.css'
 
 export const AgentMonitor = ({ resultId }) => {
   const [events, setEvents] = useState([])
   const [isExpanded, setIsExpanded] = useState(true)
+  const [activeTab, setActiveTab] = useState('events')
+  const [validationLog, setValidationLog] = useState(null)
+  const [loadingLog, setLoadingLog] = useState(false)
 
   const handleMessage = useCallback((message) => {
     if (message.event) {
@@ -13,6 +17,16 @@ export const AgentMonitor = ({ resultId }) => {
   }, [])
 
   const { isConnected } = useWebSocket(handleMessage)
+
+  useEffect(() => {
+    if (resultId && activeTab === 'validation') {
+      setLoadingLog(true)
+      getValidationLog(resultId)
+        .then(res => setValidationLog(res.data))
+        .catch(err => console.error('Failed to load validation log:', err))
+        .finally(() => setLoadingLog(false))
+    }
+  }, [resultId, activeTab])
 
   const getEventIcon = (event) => {
     const icons = {
@@ -44,6 +58,26 @@ export const AgentMonitor = ({ resultId }) => {
     return colors[event] || '#666'
   }
 
+  const getStatusColor = (status) => {
+    const colors = {
+      'filled': '#4CAF50',
+      'missing': '#f44336',
+      'uncertain': '#FF9800'
+    }
+    return colors[status] || '#666'
+  }
+
+  const getConfidenceBar = (confidence) => {
+    const percentage = Math.round(confidence * 100)
+    const color = confidence > 0.75 ? '#4CAF50' : confidence > 0.5 ? '#FF9800' : '#f44336'
+    return (
+      <div className="confidence-bar-container">
+        <div className="confidence-bar" style={{ width: `${percentage}%`, backgroundColor: color }} />
+        <span className="confidence-text">{percentage}%</span>
+      </div>
+    )
+  }
+
   return (
     <div className={`agent-monitor ${isExpanded ? 'expanded' : 'collapsed'}`}>
       <div className="monitor-header" onClick={() => setIsExpanded(!isExpanded)}>
@@ -58,26 +92,91 @@ export const AgentMonitor = ({ resultId }) => {
 
       {isExpanded && (
         <div className="monitor-content">
-          {events.length === 0 ? (
-            <p className="no-events">
-              {resultId ? 'Waiting for extraction events...' : 'Upload and extract a document to see events'}
-            </p>
-          ) : (
-            <div className="events-list">
-              {events.map((event, index) => (
-                <div key={index} className="event-item">
-                  <span className="event-icon">{getEventIcon(event.event)}</span>
-                  <div className="event-details">
-                    <p className="event-name" style={{ color: getEventColor(event.event) }}>
-                      {event.event.replace(/_/g, ' ').toUpperCase()}
-                    </p>
-                    <p className="event-time">{event.timestamp}</p>
-                    {event.data && Object.keys(event.data).length > 0 && (
-                      <p className="event-data">{JSON.stringify(event.data, null, 2).substring(0, 200)}...</p>
-                    )}
+          {resultId && (
+            <div className="monitor-tabs">
+              <button 
+                className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
+                onClick={() => setActiveTab('events')}
+              >
+                Events
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'validation' ? 'active' : ''}`}
+                onClick={() => setActiveTab('validation')}
+              >
+                dLLM Validation
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'events' && (
+            events.length === 0 ? (
+              <p className="no-events">
+                {resultId ? 'Waiting for extraction events...' : 'Upload and extract a document to see events'}
+              </p>
+            ) : (
+              <div className="events-list">
+                {events.map((event, index) => (
+                  <div key={index} className="event-item">
+                    <span className="event-icon">{getEventIcon(event.event)}</span>
+                    <div className="event-details">
+                      <p className="event-name" style={{ color: getEventColor(event.event) }}>
+                        {event.event.replace(/_/g, ' ').toUpperCase()}
+                      </p>
+                      <p className="event-time">{event.timestamp}</p>
+                      {event.data && Object.keys(event.data).length > 0 && (
+                        <p className="event-data">{JSON.stringify(event.data, null, 2).substring(0, 200)}...</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )
+          )}
+
+          {activeTab === 'validation' && (
+            <div className="validation-panel">
+              {loadingLog ? (
+                <p className="loading">Loading validation log...</p>
+              ) : validationLog ? (
+                <>
+                  <div className="validation-summary">
+                    <span className="summary-item filled">
+                      {validationLog.filled} Filled
+                    </span>
+                    <span className="summary-item missing">
+                      {validationLog.missing} Missing
+                    </span>
+                    <span className="summary-item uncertain">
+                      {validationLog.uncertain} Uncertain
+                    </span>
+                  </div>
+                  <div className="validation-table">
+                    <div className="validation-table-header">
+                      <span>Field</span>
+                      <span>Status</span>
+                      <span>Value</span>
+                      <span>Confidence</span>
+                    </div>
+                    {validationLog.fields.map((field, index) => (
+                      <div key={index} className="validation-row">
+                        <span className="field-name">{field.field}</span>
+                        <span className="field-status" style={{ color: getStatusColor(field.status) }}>
+                          {field.status.toUpperCase()}
+                        </span>
+                        <span className="field-value">
+                          {field.value !== null ? String(field.value).substring(0, 50) : '-'}
+                        </span>
+                        <span className="field-confidence">
+                          {getConfidenceBar(field.confidence)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="no-data">No validation data available</p>
+              )}
             </div>
           )}
         </div>

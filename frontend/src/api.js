@@ -28,6 +28,8 @@ export const extractFields = (filename, rawText, schema) =>
 
 export const getExtraction = (resultId) => api.get(`/extraction/${resultId}`)
 
+export const getValidationLog = (resultId) => api.get(`/extraction/${resultId}/validation-log`)
+
 export const applyOverrides = (resultId, overrides) =>
   api.post(`/extraction/${resultId}/overrides`, { result_id: resultId, overrides })
 

@@ -148,6 +148,7 @@ class ExtractionPipeline:
             raw_text=raw_text,
             extracted_json=extracted_json or {},
             human_overrides={},
+            dllm_report=dllm_report or {},
             status=final_status
         )
         

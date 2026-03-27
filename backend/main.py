@@ -303,19 +303,53 @@ def get_extraction(result_id: int, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="Result not found")
     
-    # Get missing fields from dLLM report (if available)
-    missing_fields = []
-    dllm_report = {}
-    
     return ExtractionReportResponse(
         result_id=result.id,
         filename=result.filename,
         fingerprint=result.fingerprint,
         status=result.status.value,
         extracted_json=result.extracted_json,
-        missing_fields=missing_fields,
-        dllm_report=dllm_report
+        missing_fields=[],
+        dllm_report=result.dllm_report or {}
     )
+
+
+@app.get("/api/extraction/{result_id}/validation-log")
+def get_validation_log(result_id: int, db: Session = Depends(get_db)):
+    """Get the dLLM validation log for an extraction result."""
+    result = db.query(ExtractionResult).filter_by(id=result_id).first()
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    
+    dllm_report = result.dllm_report or {}
+    fields = dllm_report.get("fields", {})
+    
+    if not fields:
+        return {
+            "result_id": result_id,
+            "message": "No dLLM validation data available",
+            "fields": []
+        }
+    
+    validation_log = []
+    for field_name, field_data in fields.items():
+        validation_log.append({
+            "field": field_name,
+            "status": field_data.get("status", "unknown"),
+            "value": field_data.get("value"),
+            "confidence": field_data.get("confidence", 0.0)
+        })
+    
+    return {
+        "result_id": result_id,
+        "filename": result.filename,
+        "fingerprint": result.fingerprint,
+        "total_fields": len(validation_log),
+        "filled": len([v for v in validation_log if v["status"] == "filled"]),
+        "missing": len([v for v in validation_log if v["status"] == "missing"]),
+        "uncertain": len([v for v in validation_log if v["status"] == "uncertain"]),
+        "fields": validation_log
+    }
 
 
 @app.post("/api/extraction/{result_id}/overrides")
