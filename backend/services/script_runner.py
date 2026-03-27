@@ -1,7 +1,9 @@
 """
 Safe execution of LLM-generated extraction scripts.
 """
+import re
 import json
+from datetime import datetime, date
 from typing import Dict, Any
 
 
@@ -20,7 +22,14 @@ class ScriptRunner:
         Returns:
             Dictionary with extracted field values
         """
-        # Setup safe environment
+        import re
+        import json
+        from datetime import datetime, date
+
+        lines = script_body.split('\n')
+        cleaned_lines = [line for line in lines if not line.strip().startswith('import ') and not line.strip().startswith('from ')]
+        cleaned_script = '\n'.join(cleaned_lines)
+
         safe_builtins = {
             'len': len,
             'str': str,
@@ -31,45 +40,42 @@ class ScriptRunner:
             'dict': dict,
             'tuple': tuple,
             'set': set,
+            'range': range,
+            'enumerate': enumerate,
+            'zip': zip,
+            'map': map,
+            'filter': filter,
+            'min': min,
+            'max': max,
+            'sum': sum,
+            'sorted': sorted,
+            're': re,
+            'json': json,
+            'datetime': datetime,
+            'date': date,
             'None': None,
             'True': True,
             'False': False,
         }
 
-        # Allowed imports
-        import re
-        import json as json_module
-        from datetime import datetime, date
-
-        allowed_modules = {
-            're': re,
-            'json': json_module,
-            'datetime': datetime,
-            'date': date,
-        }
-
-        # Local scope for script execution
         local_scope = {
             'raw_text': raw_text,
             'result': {},
             're': re,
-            'json': json_module,
+            'json': json,
             'datetime': datetime,
             'date': date,
         }
 
         try:
-            # Execute the script with restricted environment
-            exec(script_body, {"__builtins__": safe_builtins}, local_scope)
+            exec(cleaned_script, {"__builtins__": safe_builtins}, local_scope)
             result = local_scope.get('result', {})
             
-            # Ensure result is a dict
             if not isinstance(result, dict):
                 result = {}
             
             return result
         except Exception as e:
-            # Log the error and return empty result
             print(f"Script execution error: {e}")
             return {}
 
@@ -79,7 +85,6 @@ class ScriptRunner:
         Validate a script before execution.
         Returns (is_valid, error_message)
         """
-        # Check for dangerous patterns
         dangerous_patterns = [
             'import os',
             'import sys',
@@ -95,7 +100,6 @@ class ScriptRunner:
             if pattern in script_body:
                 return False, f"Dangerous pattern detected: {pattern}"
 
-        # Try to compile the script
         try:
             compile(script_body, '<string>', 'exec')
             return True, ""

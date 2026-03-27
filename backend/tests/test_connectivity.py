@@ -82,7 +82,7 @@ class TestOpenRouterAPI:
         from openai import OpenAI
         client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
         message = client.chat.completions.create(
-            model="inception-ai/Mercury-2",
+            model="inception/mercury-2",
             max_tokens=10,
             messages=[{"role": "user", "content": "hello"}]
         )
