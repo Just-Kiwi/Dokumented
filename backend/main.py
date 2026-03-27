@@ -2,6 +2,7 @@
 FastAPI application for Dokumented.
 Main entry point with all routes and WebSocket support.
 """
+import logging
 import json
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,25 +14,27 @@ from models.schemas import (
     HumanOverridesRequest, ExtractionReportResponse, WSEvent,
     CreditCheckResponse, CreditCheckStatus
 )
-from services.pipeline import ExtractionPipeline
+from services.pipeline import ExtractionPipeline, PipelineError
 from parsers.doc_parser import DocumentParser
 from config import (
     UPLOAD_FOLDER, OPENROUTER_API_KEY, OPENROUTER_BASE_URL,
     MAX_RETRIES, CONFIDENCE_THRESHOLD, get_config, mask_api_key
 )
-from exceptions import AnthropicCreditError, MercuryCreditError, APIError
+from exceptions import AnthropicCreditError, MercuryCreditError, APIError, APITimeoutError, APIAuthenticationError
 from openai import OpenAI
+from openai import APIError as OpenAIAPIError
 import os
 import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
 
-# Initialize database
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 init_db()
 
 app = FastAPI(title="Dokumented", version="1.0.0")
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,7 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# WebSocket manager for broadcasting events
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -48,20 +51,22 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        logger.info(f"WebSocket connected, total connections: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
+        logger.info(f"WebSocket disconnected, remaining connections: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
             except Exception as e:
-                print(f"Broadcast error: {e}")
+                logger.warning(f"Broadcast error: {e}")
+
 
 manager = ConnectionManager()
 
-# Global state for current extraction
 current_events_queue = []
 
 
@@ -71,45 +76,26 @@ def emit_event(event: dict):
     asyncio.create_task(manager.broadcast(event))
 
 
-# ============================================================================
-# CONFIG ENDPOINTS
-# ============================================================================
-
 @app.get("/api/config")
 def list_config():
-    """
-    List all configuration values from .env file.
-    API keys are masked for security.
-    """
+    """List all configuration values from .env file. API keys are masked."""
     return get_config()
 
 
 @app.get("/api/config/{key}")
 def get_config_by_key(key: str):
-    """
-    Get a specific configuration value from .env file.
-    API keys are masked for security.
-    """
+    """Get a specific configuration value from .env file."""
     config = get_config()
-    
     if key not in config:
         raise HTTPException(status_code=404, detail=f"Config '{key}' not found")
-    
     return config[key]
 
 
-# ============================================================================
-# CREDIT CHECK ENDPOINTS
-# ============================================================================
-
 @app.get("/api/credits", response_model=CreditCheckResponse)
 def check_credits():
-    """
-    Check if API keys are configured in .env and have valid credits.
-    Makes minimal test API calls to verify credits are available.
-    """
+    """Check if API keys are configured and have valid credits."""
+    
     def check_anthropic():
-        """Check OpenRouter credits for Claude."""
         api_key = OPENROUTER_API_KEY
         base_url = OPENROUTER_BASE_URL
         
@@ -128,29 +114,19 @@ def check_credits():
                 max_tokens=10,
                 messages=[{"role": "user", "content": "hi"}]
             )
-            return CreditCheckStatus(
-                provider="OpenRouter (Claude)",
-                configured=True,
-                has_credits=True
-            )
-        except Exception as e:
+            return CreditCheckStatus(provider="OpenRouter (Claude)", configured=True, has_credits=True)
+        except OpenAIAPIError as e:
             error_str = str(e).lower()
             if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                 return CreditCheckStatus(
-                    provider="OpenRouter (Claude)",
-                    configured=True,
-                    has_credits=False,
+                    provider="OpenRouter (Claude)", configured=True, has_credits=False,
                     error="Insufficient credits. Add credits to continue."
                 )
-            return CreditCheckStatus(
-                provider="OpenRouter (Claude)",
-                configured=True,
-                has_credits=False,
-                error=str(e)
-            )
+            return CreditCheckStatus(provider="OpenRouter (Claude)", configured=True, has_credits=False, error=str(e))
+        except Exception as e:
+            return CreditCheckStatus(provider="OpenRouter (Claude)", configured=True, has_credits=False, error=str(e))
     
     def check_mercury():
-        """Check OpenRouter credits for Mercury."""
         api_key = OPENROUTER_API_KEY
         base_url = OPENROUTER_BASE_URL
         
@@ -165,62 +141,51 @@ def check_credits():
         try:
             client = OpenAI(api_key=api_key, base_url=base_url)
             client.chat.completions.create(
-                model="inception-ai/Mercury-2",
+                model="inception/mercury-2",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "hello"}]
             )
-            return CreditCheckStatus(
-                provider="OpenRouter (Mercury)",
-                configured=True,
-                has_credits=True
-            )
-        except Exception as e:
+            return CreditCheckStatus(provider="OpenRouter (Mercury)", configured=True, has_credits=True)
+        except OpenAIAPIError as e:
             error_str = str(e).lower()
             if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                 return CreditCheckStatus(
-                    provider="OpenRouter (Mercury)",
-                    configured=True,
-                    has_credits=False,
+                    provider="OpenRouter (Mercury)", configured=True, has_credits=False,
                     error="Insufficient credits. Add credits to continue."
                 )
-            return CreditCheckStatus(
-                provider="OpenRouter (Mercury)",
-                configured=True,
-                has_credits=False,
-                error=str(e)
-            )
+            return CreditCheckStatus(provider="OpenRouter (Mercury)", configured=True, has_credits=False, error=str(e))
+        except Exception as e:
+            return CreditCheckStatus(provider="OpenRouter (Mercury)", configured=True, has_credits=False, error=str(e))
     
-    return CreditCheckResponse(
-        anthropic=check_anthropic(),
-        mercury=check_mercury()
-    )
+    return CreditCheckResponse(anthropic=check_anthropic(), mercury=check_mercury())
 
-
-# ============================================================================
-# EXTRACTION ENDPOINTS
-# ============================================================================
 
 @app.post("/api/upload")
 async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Upload a document and return raw text."""
+    logger.info(f"Uploading file: {file.filename}")
     
-    # Save file
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     file_path = os.path.join(UPLOAD_FOLDER, file.filename)
     
-    with open(file_path, 'wb') as f:
+    try:
         content = await file.read()
-        f.write(content)
+        with open(file_path, 'wb') as f:
+            f.write(content)
+    except Exception as e:
+        logger.error(f"Failed to save uploaded file: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to save file: {str(e)}")
     
-    # Parse document
     try:
         raw_text = DocumentParser.parse(file_path)
+        logger.info(f"File parsed successfully, {len(raw_text)} chars")
     except Exception as e:
+        logger.error(f"Failed to parse document: {e}")
         raise HTTPException(status_code=400, detail=f"Parse error: {str(e)}")
     
     return {
         "filename": file.filename,
-        "raw_text": raw_text[:10000],  # Return first 10k chars for preview
+        "raw_text": raw_text[:10000],
         "full_text_length": len(raw_text)
     }
 
@@ -228,20 +193,22 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 @app.post("/api/extract")
 async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
     """Extract fields from a document."""
+    logger.info(f"Starting extraction for: {request.filename}")
     
-    # Get API keys from .env (never from database for security)
     llm_key = OPENROUTER_API_KEY
     dllm_key = OPENROUTER_API_KEY
     dllm_url = OPENROUTER_BASE_URL
     
-    # Validate keys are configured
     if not llm_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OPENROUTER_API_KEY not configured. Set it in .env file."
-        )
+        logger.error("OPENROUTER_API_KEY not configured")
+        raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not configured. Set it in .env file.")
     
-    # Create pipeline
+    if not request.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    
+    if not request.raw_text:
+        raise HTTPException(status_code=400, detail="raw_text is required")
+    
     pipeline = ExtractionPipeline(
         db,
         llm_api_key=llm_key,
@@ -249,10 +216,8 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
         dllm_base_url=dllm_url
     )
     
-    # Clear events
     current_events_queue.clear()
     
-    # Run extraction
     try:
         result_id = await pipeline.extract(
             request.filename,
@@ -260,11 +225,13 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
             request.schema or [],
             events_callback=emit_event
         )
+        logger.info(f"Extraction completed successfully, result_id: {result_id}")
+        return {"result_id": result_id, "status": "success"}
         
-        return {"result_id": result_id, "status": "started"}
     except AnthropicCreditError as e:
+        logger.error(f"Anthropic credit error: {e.message}")
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            status_code=402,
             detail={
                 "error": "Anthropic API (Claude) has insufficient credits",
                 "message": e.message,
@@ -273,8 +240,9 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
             }
         )
     except MercuryCreditError as e:
+        logger.error(f"Mercury credit error: {e.message}")
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            status_code=402,
             detail={
                 "error": "Mercury/Inception Labs API has insufficient credits",
                 "message": e.message,
@@ -283,16 +251,22 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
             }
         )
     except APIError as e:
+        logger.error(f"API error from {e.provider}: {e.message}")
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            status_code=502,
             detail={
                 "error": f"{e.provider} API error",
                 "message": e.message,
                 "provider": e.provider,
-                "suggestion": "Add credits to continue"
+                "error_code": e.error_code,
+                "suggestion": "Check API configuration and try again"
             }
         )
+    except PipelineError as e:
+        logger.error(f"Pipeline error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
+        logger.error(f"Unexpected extraction error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Extraction error: {str(e)}")
 
 
@@ -301,7 +275,7 @@ def get_extraction(result_id: int, db: Session = Depends(get_db)):
     """Get an extraction result."""
     result = db.query(ExtractionResult).filter_by(id=result_id).first()
     if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
+        raise HTTPException(status_code=404, detail=f"Result {result_id} not found")
     
     return ExtractionReportResponse(
         result_id=result.id,
@@ -319,7 +293,7 @@ def get_validation_log(result_id: int, db: Session = Depends(get_db)):
     """Get the dLLM validation log for an extraction result."""
     result = db.query(ExtractionResult).filter_by(id=result_id).first()
     if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
+        raise HTTPException(status_code=404, detail=f"Result {result_id} not found")
     
     dllm_report = result.dllm_report or {}
     fields = dllm_report.get("fields", {})
@@ -355,26 +329,23 @@ def get_validation_log(result_id: int, db: Session = Depends(get_db)):
 @app.post("/api/extraction/{result_id}/overrides")
 def apply_overrides(result_id: int, request: HumanOverridesRequest, db: Session = Depends(get_db)):
     """Apply human overrides to missing/uncertain fields."""
-    
     result = db.query(ExtractionResult).filter_by(id=result_id).first()
     if not result:
-        raise HTTPException(status_code=404, detail="Result not found")
+        raise HTTPException(status_code=404, detail=f"Result {result_id} not found")
     
     pipeline = ExtractionPipeline(db)
     overrides_dict = {o.field_name: o.value for o in request.overrides}
     
-    final_json = pipeline.apply_human_overrides(result_id, overrides_dict)
-    
-    return {
-        "result_id": result_id,
-        "extracted_json": final_json,
-        "status": "complete"
-    }
+    try:
+        final_json = pipeline.apply_human_overrides(result_id, overrides_dict)
+        logger.info(f"Applied {len(overrides_dict)} overrides to result {result_id}")
+        return {"result_id": result_id, "extracted_json": final_json, "status": "complete"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to apply overrides: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-# ============================================================================
-# SCRIPT LIBRARY ENDPOINTS
-# ============================================================================
 
 @app.get("/api/scripts")
 def list_scripts(db: Session = Depends(get_db)):
@@ -399,7 +370,7 @@ def get_script(fingerprint: str, db: Session = Depends(get_db)):
     """Get a script by fingerprint."""
     script = db.query(ScriptLibrary).filter_by(fingerprint=fingerprint).first()
     if not script:
-        raise HTTPException(status_code=404, detail="Script not found")
+        raise HTTPException(status_code=404, detail=f"Script '{fingerprint}' not found")
     
     return {
         "fingerprint": script.fingerprint,
@@ -410,29 +381,19 @@ def get_script(fingerprint: str, db: Session = Depends(get_db)):
     }
 
 
-# ============================================================================
-# WEBSOCKET
-# ============================================================================
-
 @app.websocket("/ws/status")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for live extraction status."""
     await manager.connect(websocket)
     try:
         while True:
-            # Keep connection alive
             data = await websocket.receive_text()
-            # Echo back or handle commands
             await websocket.send_json({"type": "pong", "data": data})
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.warning(f"WebSocket error: {e}")
     finally:
         manager.disconnect(websocket)
 
-
-# ============================================================================
-# HEALTH CHECK
-# ============================================================================
 
 @app.get("/health")
 def health_check():

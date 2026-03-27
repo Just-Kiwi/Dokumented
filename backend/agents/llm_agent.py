@@ -1,12 +1,16 @@
 """
 LLM Agent using Claude Sonnet for fingerprinting and script generation.
 """
+import logging
 from openai import OpenAI
-from openai import APIError as OpenAIAPIError
+from openai import APIError as OpenAIAPIError, RateLimitError, Timeout as OpenAITimeout
 from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 import json
 from typing import Tuple, Optional
-from exceptions import AnthropicCreditError, APITimeoutError, APIAuthenticationError
+from exceptions import AnthropicCreditError, APITimeoutError, APIAuthenticationError, APIError
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class LLMAgent:
@@ -18,6 +22,7 @@ class LLMAgent:
         url = base_url or OPENROUTER_BASE_URL
         self.client = OpenAI(api_key=key, base_url=url)
         self.model = "anthropic/claude-3.5-sonnet"
+        self.max_retries = 2
 
     def fingerprint(self, raw_text: str) -> str:
         """
@@ -37,19 +42,35 @@ Document text (first 1000 chars):
 
 Return ONLY the fingerprint string, nothing else."""
 
-        try:
-            message = self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=50,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            fingerprint = message.choices[0].message.content.strip().lower()
-            return fingerprint
-        except OpenAIAPIError as e:
-            if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
-                raise AnthropicCreditError(str(e))
-            raise
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                message = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=50,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                fingerprint = message.choices[0].message.content.strip().lower()
+                logger.info(f"Fingerprint generated: {fingerprint}")
+                return fingerprint
+            except RateLimitError as e:
+                logger.warning(f"Rate limit hit on fingerprint attempt {attempt}, retrying...")
+                if attempt == self.max_retries:
+                    raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
+            except OpenAITimeout as e:
+                logger.warning(f"Timeout on fingerprint attempt {attempt}, retrying...")
+                if attempt == self.max_retries:
+                    raise APITimeoutError("Claude", str(e))
+            except OpenAIAPIError as e:
+                error_str = str(e).lower()
+                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                    logger.error("Insufficient credits for Claude API")
+                    raise AnthropicCreditError(str(e))
+                if "authentication" in error_str or "unauthorized" in error_str:
+                    logger.error("Authentication failed for Claude API")
+                    raise APIAuthenticationError("Claude", str(e))
+                logger.error(f"OpenRouter API error: {e}")
+                raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
 
     def write_script(self, raw_text: str, schema: list, fingerprint: str) -> str:
         """
@@ -58,7 +79,20 @@ Return ONLY the fingerprint string, nothing else."""
         Returns Python code string that extracts fields from raw_text.
         The script must assign results to a 'result' dict.
         """
-        schema_str = "\n".join([f"  - {f['name']}: {f.get('description', 'N/A')}" for f in schema])
+        if not schema:
+            logger.warning("Empty schema provided, generating default script")
+            schema = [{"name": "field1", "description": "Extracted field", "required": True}]
+        
+        def get_field_info(f):
+            if hasattr(f, 'model_dump'):
+                d = f.model_dump()
+            elif hasattr(f, 'dict'):
+                d = f.dict()
+            else:
+                d = f
+            return d.get('name'), d.get('description', 'N/A')
+        
+        schema_str = "\n".join([f"  - {name}: {desc}" for f in schema for name, desc in [get_field_info(f)]])
 
         prompt = f"""Write a Python script to extract fields from a document of format: {fingerprint}
 
@@ -66,7 +100,7 @@ Target fields to extract:
 {schema_str}
 
 Document text to extract from:
-{raw_text}
+{raw_text[:3000]}
 
 Requirements:
 1. Return a Python script that uses only built-in libraries (re, json, datetime)
@@ -94,33 +128,54 @@ result = {{
 
 Write only the Python script, no explanation."""
 
-        try:
-            message = self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            script = message.choices[0].message.content.strip()
-            # Remove markdown code blocks if present
-            if script.startswith("```python"):
-                script = script[9:]
-            if script.startswith("```"):
-                script = script[3:]
-            if script.endswith("```"):
-                script = script[:-3]
-            
-            return script.strip()
-        except OpenAIAPIError as e:
-            if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
-                raise AnthropicCreditError(str(e))
-            raise
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                message = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=2000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                script = message.choices[0].message.content.strip()
+                if script.startswith("```python"):
+                    script = script[9:]
+                if script.startswith("```"):
+                    script = script[3:]
+                if script.endswith("```"):
+                    script = script[:-3]
+                
+                logger.info(f"Script generated ({len(script)} chars)")
+                return script.strip()
+            except RateLimitError as e:
+                logger.warning(f"Rate limit hit on script generation attempt {attempt}")
+                if attempt == self.max_retries:
+                    raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
+            except OpenAITimeout as e:
+                logger.warning(f"Timeout on script generation attempt {attempt}")
+                if attempt == self.max_retries:
+                    raise APITimeoutError("Claude", str(e))
+            except OpenAIAPIError as e:
+                error_str = str(e).lower()
+                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                    logger.error("Insufficient credits for Claude API")
+                    raise AnthropicCreditError(str(e))
+                if "authentication" in error_str or "unauthorized" in error_str:
+                    logger.error("Authentication failed for Claude API")
+                    raise APIAuthenticationError("Claude", str(e))
+                logger.error(f"OpenRouter API error: {e}")
+                raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
 
     def revise_script(self, script_body: str, raw_text: str, schema: list, 
                      missing_fields: list, attempt: int) -> str:
         """
         Revise an extraction script based on dLLM feedback.
         """
+        if not schema:
+            schema = [{"name": "field1", "description": "Extracted field", "required": True}]
+        if not missing_fields:
+            logger.warning("No missing fields provided, returning original script")
+            return script_body
+            
         schema_str = "\n".join([f"  - {f['name']}: {f.get('description', 'N/A')}" for f in schema])
         missing_str = ", ".join(missing_fields)
 
@@ -128,7 +183,7 @@ Write only the Python script, no explanation."""
             guidance = "The document layout may have shifted. Adjust field selectors to match the new format."
         elif attempt == 2:
             guidance = "The previous patch was incomplete. Re-examine the full script and target the right sections."
-        else:  # attempt == 3
+        else:
             guidance = "This may be a new format variant. Write a completely fresh script with different selectors."
 
         prompt = f"""Revise this extraction script. The dLLM flagged these fields as missing or incorrect: {missing_str}
@@ -155,24 +210,39 @@ Requirements:
 
 Revised script:"""
 
-        try:
-            message = self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=2000,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            script = message.choices[0].message.content.strip()
-            # Remove markdown code blocks if present
-            if script.startswith("```python"):
-                script = script[9:]
-            if script.startswith("```"):
-                script = script[3:]
-            if script.endswith("```"):
-                script = script[:-3]
-            
-            return script.strip()
-        except OpenAIAPIError as e:
-            if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
-                raise AnthropicCreditError(str(e))
-            raise
+        for attempt_num in range(1, self.max_retries + 1):
+            try:
+                message = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=2000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                
+                script = message.choices[0].message.content.strip()
+                if script.startswith("```python"):
+                    script = script[9:]
+                if script.startswith("```"):
+                    script = script[3:]
+                if script.endswith("```"):
+                    script = script[:-3]
+                
+                logger.info(f"Script revised ({len(script)} chars)")
+                return script.strip()
+            except RateLimitError as e:
+                logger.warning(f"Rate limit hit on script revision attempt {attempt_num}")
+                if attempt_num == self.max_retries:
+                    raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
+            except OpenAITimeout as e:
+                logger.warning(f"Timeout on script revision attempt {attempt_num}")
+                if attempt_num == self.max_retries:
+                    raise APITimeoutError("Claude", str(e))
+            except OpenAIAPIError as e:
+                error_str = str(e).lower()
+                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                    logger.error("Insufficient credits for Claude API")
+                    raise AnthropicCreditError(str(e))
+                if "authentication" in error_str or "unauthorized" in error_str:
+                    logger.error("Authentication failed for Claude API")
+                    raise APIAuthenticationError("Claude", str(e))
+                logger.error(f"OpenRouter API error: {e}")
+                raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")

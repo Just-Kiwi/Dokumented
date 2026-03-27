@@ -1,12 +1,16 @@
 """
 dLLM Agent using Mercury 2 for field validation.
 """
+import logging
 from openai import OpenAI
-from openai import APIError as OpenAIAPIError, AuthenticationError as OpenAIAuthError
+from openai import APIError as OpenAIAPIError, RateLimitError, Timeout as OpenAITimeout
 from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 import json
 from typing import Optional, Dict, List
-from exceptions import MercuryCreditError
+from exceptions import MercuryCreditError, APITimeoutError, APIAuthenticationError, APIError
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class dLLMChecker:
@@ -18,6 +22,7 @@ class dLLMChecker:
         url = base_url or OPENROUTER_BASE_URL
         self.client = OpenAI(api_key=key, base_url=url)
         self.model = "inception/mercury-2"
+        self.max_retries = 2
 
     def check_fields(self, raw_text: str, extracted_json: Dict, schema: List[Dict]) -> Dict:
         """
@@ -35,6 +40,13 @@ class dLLMChecker:
             }
         }
         """
+        if not schema:
+            logger.warning("Empty schema provided, returning default result")
+            return {"fields": {}}
+        
+        if not extracted_json:
+            logger.warning("Empty extracted_json provided")
+
         schema_str = "\n".join([f"  - {f['name']}: {f.get('description', 'N/A')}" for f in schema])
         extracted_str = json.dumps(extracted_json, indent=2)
 
@@ -67,56 +79,70 @@ Return valid JSON ONLY (no markdown, no code blocks):
   }}
 }}"""
 
-        try:
-            message = self.client.chat.completions.create(
-                model=self.model,
-                max_tokens=1500,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-            
-            response_text = message.choices[0].message.content
-            if response_text:
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                message = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=1500,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3
+                )
+                
+                response_text = message.choices[0].message.content
+                if not response_text:
+                    logger.warning("Empty response from Mercury API")
+                    raise MercuryCreditError("Empty response from Mercury API")
+                
                 response_text = response_text.strip()
-            else:
-                raise MercuryCreditError("Empty response from Mercury API")
-            
-            # Clean up response if it has markdown code blocks
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
-                response_text = response_text.strip()
-            
-            report = json.loads(response_text)
-            return report
-        except OpenAIAPIError as e:
-            error_str = str(e).lower()
-            if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
-                raise MercuryCreditError(str(e))
-            raise
-        except json.JSONDecodeError:
-            # Fallback: return a basic report if parsing fails
-            return {
-                "fields": {
-                    field["name"]: {
-                        "status": "uncertain",
-                        "value": extracted_json.get(field["name"]),
-                        "confidence": 0.5
-                    }
-                    for field in schema
+                
+                if response_text.startswith("```"):
+                    parts = response_text.split("```")
+                    if len(parts) >= 2:
+                        response_text = parts[1]
+                        if response_text.startswith("json"):
+                            response_text = response_text[4:]
+                        response_text = response_text.strip()
+                
+                report = json.loads(response_text)
+                logger.info(f"dLLM validation complete, {len(report.get('fields', {}))} fields analyzed")
+                return report
+                
+            except RateLimitError as e:
+                logger.warning(f"Rate limit hit on dLLM check attempt {attempt}")
+                if attempt == self.max_retries:
+                    raise APIError(str(e), provider="Mercury", error_code="RATE_LIMIT")
+            except OpenAITimeout as e:
+                logger.warning(f"Timeout on dLLM check attempt {attempt}")
+                if attempt == self.max_retries:
+                    raise APITimeoutError("Mercury", str(e))
+            except OpenAIAPIError as e:
+                error_str = str(e).lower()
+                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                    logger.error("Insufficient credits for Mercury API")
+                    raise MercuryCreditError(str(e))
+                if "authentication" in error_str or "unauthorized" in error_str:
+                    logger.error("Authentication failed for Mercury API")
+                    raise APIAuthenticationError("Mercury", str(e))
+                logger.error(f"Mercury API error: {e}")
+                raise APIError(str(e), provider="Mercury", error_code="API_ERROR")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse Mercury response as JSON: {e}")
+                if attempt == self.max_retries:
+                    break
+            except Exception as e:
+                logger.error(f"Unexpected error in dLLM check: {e}")
+                if attempt == self.max_retries:
+                    break
+        
+        # Fallback: return a basic report with all fields marked uncertain
+        logger.warning("Returning fallback validation report")
+        return {
+            "fields": {
+                field["name"]: {
+                    "status": "uncertain",
+                    "value": extracted_json.get(field["name"]),
+                    "confidence": 0.5
                 }
+                for field in schema
             }
-        except Exception as e:
-            # Fallback on any error
-            print(f"dLLM check error: {e}")
-            return {
-                "fields": {
-                    field["name"]: {
-                        "status": "uncertain",
-                        "value": extracted_json.get(field["name"]),
-                        "confidence": 0.5
-                    }
-                    for field in schema
-                }
-            }
+        }
