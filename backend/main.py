@@ -277,6 +277,19 @@ def get_extraction(result_id: int, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail=f"Result {result_id} not found")
     
+    dllm_report = result.dllm_report or {}
+    dllm_fields = dllm_report.get("fields", {})
+    
+    missing_fields = [
+        field_name for field_name, field_data in dllm_fields.items()
+        if field_data.get("status") in ["missing", "uncertain"]
+    ]
+    
+    schema = [
+        {"name": field_name, "status": field_data.get("status"), "confidence": field_data.get("confidence")}
+        for field_name, field_data in dllm_fields.items()
+    ]
+    
     return ExtractionReportResponse(
         result_id=result.id,
         filename=result.filename,
@@ -284,7 +297,8 @@ def get_extraction(result_id: int, db: Session = Depends(get_db)):
         script_version=result.script_version,
         status=result.status.value,
         extracted_json=result.extracted_json,
-        missing_fields=[],
+        missing_fields=missing_fields,
+        schema=schema,
         dllm_report=result.dllm_report or {}
     )
 

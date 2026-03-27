@@ -65,6 +65,7 @@ class ExtractionReportResponse(BaseModel):
     status: str
     extracted_json: Dict[str, Any]
     missing_fields: List[str]
+    schema: Optional[List[Dict[str, Any]]] = None
     dllm_report: Optional[Dict[str, Any]] = None
 
     class Config:
