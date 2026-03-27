@@ -150,7 +150,6 @@ def sample_extracted_json():
 def sample_script(test_db):
     """Create a sample script in the test database."""
     script = ScriptLibrary(
-        fingerprint="invoice-standard",
         script_body="""import re
 result = {
     'invoice_number': re.search(r'Invoice Number:\\s*(\\S+)', raw_text).group(1) if re.search(r'Invoice Number:\\s*(\\S+)', raw_text) else None,
@@ -172,7 +171,7 @@ def sample_extraction_result(test_db, sample_script):
     """Create a sample extraction result."""
     result = ExtractionResult(
         filename="test_invoice.pdf",
-        fingerprint="invoice-standard",
+        script_id=sample_script.id,
         script_version=1,
         raw_text="Sample invoice text",
         extracted_json={"invoice_number": "INV-001"},

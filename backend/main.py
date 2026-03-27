@@ -280,7 +280,8 @@ def get_extraction(result_id: int, db: Session = Depends(get_db)):
     return ExtractionReportResponse(
         result_id=result.id,
         filename=result.filename,
-        fingerprint=result.fingerprint,
+        script_id=result.script_id,
+        script_version=result.script_version,
         status=result.status.value,
         extracted_json=result.extracted_json,
         missing_fields=[],
@@ -317,7 +318,8 @@ def get_validation_log(result_id: int, db: Session = Depends(get_db)):
     return {
         "result_id": result_id,
         "filename": result.filename,
-        "fingerprint": result.fingerprint,
+        "script_id": result.script_id,
+        "script_version": result.script_version,
         "total_fields": len(validation_log),
         "filled": len([v for v in validation_log if v["status"] == "filled"]),
         "missing": len([v for v in validation_log if v["status"] == "missing"]),
@@ -354,7 +356,6 @@ def list_scripts(db: Session = Depends(get_db)):
     return [
         {
             "id": s.id,
-            "fingerprint": s.fingerprint,
             "version": s.version,
             "success_count": s.success_count,
             "fail_count": s.fail_count,
@@ -365,15 +366,15 @@ def list_scripts(db: Session = Depends(get_db)):
     ]
 
 
-@app.get("/api/scripts/{fingerprint}")
-def get_script(fingerprint: str, db: Session = Depends(get_db)):
-    """Get a script by fingerprint."""
-    script = db.query(ScriptLibrary).filter_by(fingerprint=fingerprint).first()
+@app.get("/api/scripts/{script_id}")
+def get_script(script_id: int, db: Session = Depends(get_db)):
+    """Get a script by ID."""
+    script = db.query(ScriptLibrary).filter_by(id=script_id).first()
     if not script:
-        raise HTTPException(status_code=404, detail=f"Script '{fingerprint}' not found")
+        raise HTTPException(status_code=404, detail=f"Script {script_id} not found")
     
     return {
-        "fingerprint": script.fingerprint,
+        "id": script.id,
         "script_body": script.script_body,
         "version": script.version,
         "success_count": script.success_count,

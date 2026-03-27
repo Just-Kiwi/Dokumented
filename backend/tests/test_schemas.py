@@ -201,21 +201,23 @@ class TestExtractionReportResponse:
         response = ExtractionReportResponse(
             result_id=1,
             filename="invoice.pdf",
-            fingerprint="vendor-invoice",
+            script_id=1,
+            script_version=1,
             status="complete",
             extracted_json={"amount": "100.00"},
             missing_fields=[]
         )
         assert response.result_id == 1
         assert response.filename == "invoice.pdf"
-        assert response.fingerprint == "vendor-invoice"
+        assert response.script_id == 1
 
     def test_extraction_report_response_with_missing_fields(self):
         """Test ExtractionReportResponse with missing fields."""
         response = ExtractionReportResponse(
             result_id=2,
             filename="receipt.txt",
-            fingerprint="receipt-simple",
+            script_id=1,
+            script_version=2,
             status="partial",
             extracted_json={"vendor": "Store"},
             missing_fields=["amount", "date"]
@@ -228,7 +230,8 @@ class TestExtractionReportResponse:
         response = ExtractionReportResponse(
             result_id=3,
             filename="doc.pdf",
-            fingerprint="form-standard",
+            script_id=1,
+            script_version=1,
             status="complete",
             extracted_json={},
             missing_fields=[],

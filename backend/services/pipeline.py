@@ -20,11 +20,6 @@ class PipelineError(Exception):
     pass
 
 
-class FingerprintError(PipelineError):
-    """Failed to generate document fingerprint."""
-    pass
-
-
 class ScriptGenerationError(PipelineError):
     """Failed to generate extraction script."""
     pass
@@ -53,13 +48,28 @@ class ExtractionPipeline:
         self.max_retries = 3
         self.confidence_threshold = 0.75
 
+    def get_best_script(self):
+        """Get the script with the highest success count."""
+        return self.db.query(ScriptLibrary).order_by(ScriptLibrary.success_count.desc()).first()
+
+    def create_new_script(self, raw_text: str, schema: List[Dict]) -> ScriptLibrary:
+        """Create a new extraction script using LLM."""
+        script_body = self.llm_agent.write_script(raw_text, schema)
+        script = ScriptLibrary(
+            script_body=script_body,
+            version=1
+        )
+        self.db.add(script)
+        self.db.commit()
+        self.db.refresh(script)
+        return script
+
     async def extract(self, filename: str, raw_text: str, schema: List[Dict],
                      events_callback=None) -> int:
         """
         Full extraction pipeline. Returns the extraction_result id.
         
         Events emitted:
-        - fingerprint_assigned
         - script_found / script_written
         - script_executed
         - dllm_check_complete
@@ -72,55 +82,25 @@ class ExtractionPipeline:
             if events_callback:
                 events_callback({"event": event, "data": data or {}})
 
-        fingerprint = None
         script = None
         extracted_json = {}
         dllm_report = {}
         missing_fields = []
         
         try:
-            # Step 1: Fingerprint
+            # Step 1: Get best script or create new
             logger.info(f"Starting extraction for {filename}")
-            try:
-                fingerprint = self.llm_agent.fingerprint(raw_text)
-                emit("fingerprint_assigned", {"fingerprint": fingerprint})
-                logger.info(f"Fingerprint generated: {fingerprint}")
-            except AnthropicCreditError as e:
-                emit("error", {"step": "fingerprint", "error": str(e)})
-                raise
-            except Exception as e:
-                logger.error(f"Fingerprint generation failed: {e}")
-                emit("error", {"step": "fingerprint", "error": str(e)})
-                raise FingerprintError(f"Failed to generate fingerprint: {e}")
+            script = self.get_best_script()
+            
+            if script:
+                emit("script_found", {"version": script.version})
+                logger.info(f"Found existing script v{script.version} (success_count={script.success_count})")
+            else:
+                script = self.create_new_script(raw_text, schema)
+                emit("script_written", {"version": script.version})
+                logger.info(f"Created new script v{script.version}")
 
-            # Step 2: Script lookup or creation
-            try:
-                script = self.db.query(ScriptLibrary).filter_by(fingerprint=fingerprint).first()
-                
-                if script:
-                    emit("script_found", {"version": script.version})
-                    logger.info(f"Found existing script v{script.version}")
-                else:
-                    script_body = self.llm_agent.write_script(raw_text, schema, fingerprint)
-                    script = ScriptLibrary(
-                        fingerprint=fingerprint,
-                        script_body=script_body,
-                        version=1
-                    )
-                    self.db.add(script)
-                    self.db.commit()
-                    self.db.refresh(script)
-                    emit("script_written", {"version": script.version})
-                    logger.info(f"Created new script v{script.version}")
-            except AnthropicCreditError as e:
-                emit("error", {"step": "script_generation", "error": str(e)})
-                raise
-            except Exception as e:
-                logger.error(f"Script generation failed: {e}")
-                emit("error", {"step": "script_generation", "error": str(e)})
-                raise ScriptGenerationError(f"Failed to generate script: {e}")
-
-            # Step 3-8: Execute with retry loop
+            # Step 2-7: Execute with retry loop
             for attempt in range(1, self.max_retries + 1):
                 logger.info(f"Extraction attempt {attempt}/{self.max_retries}")
                 
@@ -200,16 +180,29 @@ class ExtractionPipeline:
                         emit("error", {"step": "script_revision", "error": str(e)})
                 else:
                     missing_fields = missing_high_confidence + missing_low_confidence
+                    
+                    # If this was the last attempt and we still have missing fields, generate new script
+                    if attempt == self.max_retries and missing_fields:
+                        logger.warning(f"All {self.max_retries} attempts failed. Generating new script...")
+                        emit("retry_exhausted", {"attempts": self.max_retries, "fields": missing_fields})
+                        
+                        script = self.create_new_script(raw_text, schema)
+                        logger.info(f"Generated new script v{script.version} to replace failed one")
+                        
+                        # Reset for next extraction cycle - this will be saved as failed result
+                        # The new script will be tried next time a similar document comes in
+                        break
+                    
                     logger.warning(f"Escalating {len(missing_fields)} fields to human")
                     break
 
-            # Step 9: Save result
+            # Step 8: Save result
             final_status = StatusEnum.complete if not missing_fields else StatusEnum.partial
             
             result = ExtractionResult(
                 filename=filename,
-                fingerprint=fingerprint,
-                script_version=script.version,
+                script_id=script.id if script else None,
+                script_version=script.version if script else 1,
                 raw_text=raw_text,
                 extracted_json=extracted_json or {},
                 human_overrides={},
@@ -239,8 +232,6 @@ class ExtractionPipeline:
 
         except (AnthropicCreditError, MercuryCreditError, APIError):
             raise
-        except FingerprintError:
-            raise
         except ScriptGenerationError:
             raise
         except Exception as e:
@@ -249,10 +240,10 @@ class ExtractionPipeline:
             
             # Save failed result if we have partial data
             try:
-                if fingerprint and script:
+                if script:
                     result = ExtractionResult(
                         filename=filename,
-                        fingerprint=fingerprint or "unknown",
+                        script_id=script.id if script else None,
                         script_version=script.version if script else 1,
                         raw_text=raw_text,
                         extracted_json=extracted_json or {},

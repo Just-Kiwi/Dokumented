@@ -35,7 +35,7 @@ export const applyOverrides = (resultId, overrides) =>
 
 // Script library endpoints
 export const listScripts = () => api.get('/scripts')
-export const getScript = (fingerprint) => api.get(`/scripts/${fingerprint}`)
+export const getScript = (scriptId) => api.get(`/scripts/${scriptId}`)
 
 // WebSocket
 export const connectWebSocket = (onMessage, onError, onClose) => {

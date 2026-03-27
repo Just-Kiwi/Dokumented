@@ -30,12 +30,12 @@ export const AgentMonitor = ({ resultId }) => {
 
   const getEventIcon = (event) => {
     const icons = {
-      'fingerprint_assigned': '\uD83D\uDD0D',
       'script_found': '\uD83D\uDCE6',
       'script_written': '\u270F\uFE0F',
       'script_executed': '\u25B6\uFE0F',
       'dllm_check_complete': '\u2705',
       'retry': '\uD83D\uDD04',
+      'retry_exhausted': '\u26D4',
       'escalated_to_human': '\u26A0\uFE0F',
       'complete': '\uD83C\uDF89',
       'processing': '\u23F3'
@@ -45,12 +45,12 @@ export const AgentMonitor = ({ resultId }) => {
 
   const getEventColor = (event) => {
     const colors = {
-      'fingerprint_assigned': '#2196F3',
       'script_found': '#4CAF50',
       'script_written': '#FF9800',
       'script_executed': '#9C27B0',
       'dllm_check_complete': '#00BCD4',
       'retry': '#FF9800',
+      'retry_exhausted': '#f44336',
       'escalated_to_human': '#f44336',
       'complete': '#4CAF50',
       'processing': '#9C27B0'

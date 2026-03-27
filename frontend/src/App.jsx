@@ -62,7 +62,7 @@ function App() {
       setExtractionResult({
         result_id: response.data.result_id,
         filename: uploadedDocument.filename,
-        fingerprint: 'pending...',
+        script_version: 1,
         status: 'processing',
         extracted_json: {}
       })

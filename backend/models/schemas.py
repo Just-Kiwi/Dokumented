@@ -60,7 +60,8 @@ class ExtractionReportResponse(BaseModel):
     """Report on extraction result."""
     result_id: int
     filename: str
-    fingerprint: str
+    script_id: Optional[int] = None
+    script_version: int
     status: str
     extracted_json: Dict[str, Any]
     missing_fields: List[str]

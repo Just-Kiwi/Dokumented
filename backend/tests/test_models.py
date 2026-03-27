@@ -27,7 +27,7 @@ class TestOutcomeEnum:
         """Test OutcomeEnum has all expected values."""
         assert OutcomeEnum.resolved.value == "resolved"
         assert OutcomeEnum.escalated.value == "escalated"
-        assert OutcomeEnum.new_fingerprint.value == "new_fingerprint"
+        assert OutcomeEnum.new_script.value == "new_script"
 
     def test_outcome_enum_is_string_enum(self):
         """Test OutcomeEnum is a string enum."""
@@ -40,16 +40,15 @@ class TestScriptLibraryModel:
     def test_create_script_library(self, test_db):
         """Test creating a ScriptLibrary record."""
         script = ScriptLibrary(
-            fingerprint="invoice-standard",
             script_body="import re\nresult = {}",
             version=1
         )
         test_db.add(script)
         test_db.commit()
         
-        retrieved = test_db.query(ScriptLibrary).filter_by(fingerprint="invoice-standard").first()
+        retrieved = test_db.query(ScriptLibrary).first()
         assert retrieved is not None
-        assert retrieved.fingerprint == "invoice-standard"
+        assert retrieved.script_body == "import re\nresult = {}"
         assert retrieved.version == 1
         assert retrieved.success_count == 0
         assert retrieved.fail_count == 0
@@ -57,7 +56,6 @@ class TestScriptLibraryModel:
     def test_script_library_default_values(self, test_db):
         """Test ScriptLibrary has correct default values."""
         script = ScriptLibrary(
-            fingerprint="test-format",
             script_body="result = {}"
         )
         test_db.add(script)
@@ -70,7 +68,6 @@ class TestScriptLibraryModel:
     def test_script_library_timestamps(self, test_db):
         """Test ScriptLibrary has timestamp fields."""
         script = ScriptLibrary(
-            fingerprint="timestamp-test",
             script_body="result = {}"
         )
         test_db.add(script)
@@ -78,19 +75,6 @@ class TestScriptLibraryModel:
         
         assert script.created_at is not None
         assert isinstance(script.created_at, datetime)
-
-    def test_script_library_unique_fingerprint(self, test_db):
-        """Test ScriptLibrary fingerprint must be unique."""
-        script1 = ScriptLibrary(fingerprint="unique-test", script_body="result = {}")
-        test_db.add(script1)
-        test_db.commit()
-        
-        script2 = ScriptLibrary(fingerprint="unique-test", script_body="result = {}")
-        test_db.add(script2)
-        
-        from sqlalchemy.exc import IntegrityError
-        with pytest.raises(IntegrityError):
-            test_db.commit()
 
     def test_script_library_version_increment(self, test_db, sample_script):
         """Test version increment functionality."""
@@ -119,7 +103,7 @@ class TestExtractionResultModel:
         """Test creating an ExtractionResult record."""
         result = ExtractionResult(
             filename="test_invoice.pdf",
-            fingerprint=sample_script.fingerprint,
+            script_id=sample_script.id,
             script_version=1,
             raw_text="Raw text content",
             extracted_json={"invoice_number": "INV-001"},
@@ -130,14 +114,14 @@ class TestExtractionResultModel:
         
         retrieved = test_db.query(ExtractionResult).filter_by(filename="test_invoice.pdf").first()
         assert retrieved is not None
-        assert retrieved.fingerprint == sample_script.fingerprint
+        assert retrieved.script_id == sample_script.id
         assert retrieved.extracted_json["invoice_number"] == "INV-001"
 
     def test_extraction_result_default_status(self, test_db, sample_script):
         """Test ExtractionResult has correct default status."""
         result = ExtractionResult(
             filename="default_status.pdf",
-            fingerprint=sample_script.fingerprint,
+            script_id=sample_script.id,
             script_version=1,
             raw_text="text",
             extracted_json={}
@@ -157,7 +141,7 @@ class TestExtractionResultModel:
         }
         result = ExtractionResult(
             filename="json_test.pdf",
-            fingerprint=sample_script.fingerprint,
+            script_id=sample_script.id,
             script_version=1,
             raw_text="text",
             extracted_json=complex_json
@@ -173,7 +157,7 @@ class TestExtractionResultModel:
         """Test ExtractionResult human overrides column."""
         result = ExtractionResult(
             filename="with_overrides.pdf",
-            fingerprint=sample_script.fingerprint,
+            script_id=sample_script.id,
             script_version=1,
             raw_text="text",
             extracted_json={"field1": "original"},
@@ -189,7 +173,7 @@ class TestExtractionResultModel:
         for status in StatusEnum:
             result = ExtractionResult(
                 filename=f"status_{status.value}.pdf",
-                fingerprint=sample_script.fingerprint,
+                script_id=sample_script.id,
                 script_version=1,
                 raw_text="text",
                 extracted_json={},
@@ -339,5 +323,5 @@ class TestModelRelationships:
 
     def test_extraction_result_relationship(self, test_db, sample_extraction_result, sample_script):
         """Test ExtractionResult relationship with ScriptLibrary."""
-        assert sample_extraction_result.fingerprint == sample_script.fingerprint
-        assert sample_extraction_result.script.fingerprint == sample_script.fingerprint
+        assert sample_extraction_result.script_id == sample_script.id
+        assert sample_extraction_result.script == sample_script

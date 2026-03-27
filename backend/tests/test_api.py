@@ -91,19 +91,20 @@ class TestScriptEndpoints:
         """Test listing scripts."""
         result = list_scripts(test_db)
         assert len(result) == 1
-        assert result[0]["fingerprint"] == "invoice-standard"
+        assert result[0]["id"] == sample_script.id
+        assert result[0]["version"] == 1
 
     def test_get_script(self, test_db, sample_script):
         """Test getting a specific script."""
-        result = get_script("invoice-standard", test_db)
-        assert result["fingerprint"] == "invoice-standard"
+        result = get_script(sample_script.id, test_db)
+        assert result["id"] == sample_script.id
         assert "script_body" in result
         assert result["version"] == 1
 
     def test_get_script_not_found(self, test_db):
         """Test getting a non-existent script."""
         with pytest.raises(HTTPException) as exc_info:
-            get_script("nonexistent", test_db)
+            get_script(9999, test_db)
         assert exc_info.value.status_code == 404
         assert "not found" in str(exc_info.value.detail)
 

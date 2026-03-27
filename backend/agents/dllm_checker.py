@@ -47,7 +47,16 @@ class dLLMChecker:
         if not extracted_json:
             logger.warning("Empty extracted_json provided")
 
-        schema_str = "\n".join([f"  - {f['name']}: {f.get('description', 'N/A')}" for f in schema])
+        def get_field_info(f):
+            if hasattr(f, 'model_dump'):
+                d = f.model_dump()
+            elif hasattr(f, 'dict'):
+                d = f.dict()
+            else:
+                d = f
+            return d.get('name'), d.get('description', 'N/A')
+
+        schema_str = "\n".join([f"  - {name}: {desc}" for f in schema for name, desc in [get_field_info(f)]])
         extracted_str = json.dumps(extracted_json, indent=2)
 
         prompt = f"""Validate field extraction completeness.

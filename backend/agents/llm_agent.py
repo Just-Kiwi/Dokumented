@@ -1,5 +1,5 @@
 """
-LLM Agent using Claude Sonnet for fingerprinting and script generation.
+LLM Agent using Claude Sonnet for script generation and revision.
 """
 import logging
 from openai import OpenAI
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class LLMAgent:
-    """Claude-based agent for fingerprinting and script generation."""
+    """Claude-based agent for script generation and revision."""
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         """Initialize OpenRouter client."""
@@ -24,57 +24,9 @@ class LLMAgent:
         self.model = "anthropic/claude-3.5-sonnet"
         self.max_retries = 2
 
-    def fingerprint(self, raw_text: str) -> str:
+    def write_script(self, raw_text: str, schema: list) -> str:
         """
-        Read a document and return a format fingerprint string.
-        Example output: "vendor-invoice-tabular", "employment-contract-uk"
-        """
-        prompt = f"""Analyze this document and return a concise format fingerprint (2-4 words, hyphenated).
-        
-Examples:
-- "vendor-invoice-tabular" for a structured invoice with vendor info and line items
-- "employment-contract-uk" for a UK employment agreement
-- "medical-form-structured" for a standardized medical form
-- "receipt-tabular" for a simple receipt with line items
-
-Document text (first 1000 chars):
-{raw_text[:1000]}
-
-Return ONLY the fingerprint string, nothing else."""
-
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                message = self.client.chat.completions.create(
-                    model=self.model,
-                    max_tokens=50,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                
-                fingerprint = message.choices[0].message.content.strip().lower()
-                logger.info(f"Fingerprint generated: {fingerprint}")
-                return fingerprint
-            except RateLimitError as e:
-                logger.warning(f"Rate limit hit on fingerprint attempt {attempt}, retrying...")
-                if attempt == self.max_retries:
-                    raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
-            except OpenAITimeout as e:
-                logger.warning(f"Timeout on fingerprint attempt {attempt}, retrying...")
-                if attempt == self.max_retries:
-                    raise APITimeoutError("Claude", str(e))
-            except OpenAIAPIError as e:
-                error_str = str(e).lower()
-                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
-                    logger.error("Insufficient credits for Claude API")
-                    raise AnthropicCreditError(str(e))
-                if "authentication" in error_str or "unauthorized" in error_str:
-                    logger.error("Authentication failed for Claude API")
-                    raise APIAuthenticationError("Claude", str(e))
-                logger.error(f"OpenRouter API error: {e}")
-                raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
-
-    def write_script(self, raw_text: str, schema: list, fingerprint: str) -> str:
-        """
-        Write a Python extraction script for the given document format.
+        Write a Python extraction script for the given document.
         
         Returns Python code string that extracts fields from raw_text.
         The script must assign results to a 'result' dict.
@@ -94,7 +46,7 @@ Return ONLY the fingerprint string, nothing else."""
         
         schema_str = "\n".join([f"  - {name}: {desc}" for f in schema for name, desc in [get_field_info(f)]])
 
-        prompt = f"""Write a Python script to extract fields from a document of format: {fingerprint}
+        prompt = f"""Write a Python script to extract the following fields from the document.
 
 Target fields to extract:
 {schema_str}

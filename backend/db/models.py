@@ -19,7 +19,7 @@ class OutcomeEnum(str, enum.Enum):
     """Outcome enum for retry log."""
     resolved = "resolved"
     escalated = "escalated"
-    new_fingerprint = "new_fingerprint"
+    new_script = "new_script"
 
 
 class ScriptLibrary(Base):
@@ -27,7 +27,6 @@ class ScriptLibrary(Base):
     __tablename__ = "script_library"
 
     id = Column(Integer, primary_key=True, index=True)
-    fingerprint = Column(String, unique=True, index=True, nullable=False)
     script_body = Column(Text, nullable=False)
     version = Column(Integer, default=1)
     success_count = Column(Integer, default=0)
@@ -45,7 +44,7 @@ class ExtractionResult(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
-    fingerprint = Column(String, ForeignKey("script_library.fingerprint"), nullable=False)
+    script_id = Column(Integer, ForeignKey("script_library.id"), nullable=True)
     script_version = Column(Integer, nullable=False)
     raw_text = Column(Text, nullable=False)
     extracted_json = Column(JSON, nullable=False)

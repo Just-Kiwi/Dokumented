@@ -41,7 +41,7 @@ export const ResultsViewer = ({ result, onOverridesApplied, onError }) => {
 
       <div className="result-header">
         <p><strong>Filename:</strong> {result.filename}</p>
-        <p><strong>Fingerprint:</strong> {result.fingerprint}</p>
+        <p><strong>Script:</strong> v{result.script_version} {result.script_id ? `(ID: ${result.script_id})` : ''}</p>
         <p><strong>Status:</strong> <span className={`status ${result.status}`}>{result.status}</span></p>
       </div>
 
