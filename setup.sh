@@ -37,17 +37,19 @@ pip install -r requirements.txt -q
 echo "Backend dependencies installed"
 
 # Create .env file
-if [ ! -f ".env" ]; then
+CREATE_ENV="n"
+if [ -f ".env" ]; then
+    read -p ".env already exists. Overwrite? (y/N): " CREATE_ENV
+fi
+if [ ! -f ".env" ] || [ "$CREATE_ENV" = "y" ] || [ "$CREATE_ENV" = "Y" ]; then
     echo ""
-    echo "Please enter your API keys:"
-    read -p "Enter ANTHROPIC_API_KEY: " ANTHROPIC_KEY
-    read -p "Enter MERCURY_API_KEY: " MERCURY_KEY
+    echo "Please enter your API key:"
+    read -p "Enter OPENROUTER_API_KEY: " OPENROUTER_KEY
     
     cat > .env << EOF
 # API Keys
-ANTHROPIC_API_KEY=${ANTHROPIC_KEY}
-MERCURY_API_KEY=${MERCURY_KEY}
-MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1
+OPENROUTER_API_KEY=${OPENROUTER_KEY}
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
 # Database
 DATABASE_URL=sqlite:///./dokumented.db
@@ -59,7 +61,7 @@ CONFIDENCE_THRESHOLD=0.75
 EOF
     echo ".env file created"
 else
-    echo ".env file already exists"
+    echo ".env file already exists - skipping"
 fi
 
 cd ..

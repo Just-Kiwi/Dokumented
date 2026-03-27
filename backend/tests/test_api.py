@@ -24,9 +24,8 @@ class TestConfigEndpoints:
     def test_list_config_returns_all_keys(self):
         """Test listing all configurations from .env."""
         result = list_config()
-        assert "ANTHROPIC_API_KEY" in result
-        assert "MERCURY_API_KEY" in result
-        assert "MERCURY_BASE_URL" in result
+        assert "OPENROUTER_API_KEY" in result
+        assert "OPENROUTER_BASE_URL" in result
         assert "MAX_RETRIES" in result
         assert "CONFIDENCE_THRESHOLD" in result
 
@@ -39,14 +38,10 @@ class TestConfigEndpoints:
     def test_list_config_api_keys_masked(self):
         """Test that API keys are masked for security."""
         result = list_config()
-        anthropic = result.get("ANTHROPIC_API_KEY", {})
-        mercury = result.get("MERCURY_API_KEY", {})
+        openrouter = result.get("OPENROUTER_API_KEY", {})
         
-        if anthropic.get("configured"):
-            value = anthropic.get("value", "")
-            assert "..." in value or "*" in value or len(value) <= 12
-        if mercury.get("configured"):
-            value = mercury.get("value", "")
+        if openrouter.get("configured"):
+            value = openrouter.get("value", "")
             assert "..." in value or "*" in value or len(value) <= 12
 
     def test_get_config_by_key_valid(self):

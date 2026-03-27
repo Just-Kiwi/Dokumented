@@ -33,9 +33,8 @@ pip install -r requirements.txt
 
 Create `backend/.env`:
 ```
-ANTHROPIC_API_KEY=sk-ant-your-key-here
-MERCURY_API_KEY=your-mercury-key-here
-MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1
+OPENROUTER_API_KEY=your-openrouter-key-here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 ```
 
 Start backend:
@@ -63,12 +62,9 @@ npm run dev
 
 1. Open http://localhost:5173
 2. Click **⚙️ Settings** in the top-right
-3. Enter your API keys:
-   - **ANTHROPIC_API_KEY** (Claude Sonnet)
-   - **MERCURY_API_KEY** (Mercury 2)
-   - **MERCURY_BASE_URL** (optional, defaults to Inception Labs)
+3. Enter your OpenRouter API key:
+   - **OPENROUTER_API_KEY** (get from https://openrouter.ai/)
 4. Click **Check Configuration** to verify
-5. Click **Save Configuration**
 
 Keys are stored in the SQLite database (`dokumented.db`).
 

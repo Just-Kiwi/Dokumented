@@ -11,18 +11,16 @@ class TestConfigLoading:
     def test_config_has_required_keys(self):
         """Test config module has all required configuration keys."""
         from config import (
-            ANTHROPIC_API_KEY,
-            MERCURY_API_KEY,
-            MERCURY_BASE_URL,
+            OPENROUTER_API_KEY,
+            OPENROUTER_BASE_URL,
             DATABASE_URL,
             MAX_RETRIES,
             CONFIDENCE_THRESHOLD,
             UPLOAD_FOLDER,
         )
         
-        assert ANTHROPIC_API_KEY is not None
-        assert MERCURY_API_KEY is not None
-        assert MERCURY_BASE_URL is not None
+        assert OPENROUTER_API_KEY is not None
+        assert OPENROUTER_BASE_URL is not None
         assert DATABASE_URL is not None
         assert MAX_RETRIES is not None
         assert CONFIDENCE_THRESHOLD is not None
@@ -45,10 +43,10 @@ class TestConfigLoading:
         from config import DATABASE_URL
         assert "sqlite" in DATABASE_URL.lower()
 
-    def test_default_mercury_base_url(self):
-        """Test default Mercury base URL."""
-        from config import MERCURY_BASE_URL
-        assert "inceptionlabs.ai" in MERCURY_BASE_URL
+    def test_default_openrouter_base_url(self):
+        """Test default OpenRouter base URL."""
+        from config import OPENROUTER_BASE_URL
+        assert "openrouter.ai" in OPENROUTER_BASE_URL
 
 
 class TestConfigEnvironmentVariables:

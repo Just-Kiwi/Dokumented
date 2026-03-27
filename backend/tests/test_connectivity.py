@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import ANTHROPIC_API_KEY, MERCURY_API_KEY, MERCURY_BASE_URL
+from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 
 
 # ─────────────────────────────────────────────────────────────
@@ -20,13 +20,9 @@ from config import ANTHROPIC_API_KEY, MERCURY_API_KEY, MERCURY_BASE_URL
 class TestConfiguration:
     """Verify API keys are configured in .env."""
 
-    def test_anthropic_key_present(self):
-        """Check if ANTHROPIC_API_KEY is set in .env."""
-        assert ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY not set in .env file"
-
-    def test_mercury_key_present(self):
-        """Check if MERCURY_API_KEY is set in .env."""
-        assert MERCURY_API_KEY, "MERCURY_API_KEY not set in .env file"
+    def test_openrouter_key_present(self):
+        """Check if OPENROUTER_API_KEY is set in .env."""
+        assert OPENROUTER_API_KEY, "OPENROUTER_API_KEY not set in .env file"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -36,34 +32,17 @@ class TestConfiguration:
 class TestNetworkConnectivity:
     """Basic internet connectivity tests."""
 
-    def test_dns_resolution_anthropic(self):
-        """DNS can resolve Anthropic API hostname."""
-        try:
-            socket.gethostbyname('api.anthropic.com')
-        except socket.gaierror as e:
-            pytest.fail(f"DNS resolution failed for api.anthropic.com: {e}")
-
-    def test_dns_resolution_mercury(self):
-        """DNS can resolve Mercury/Inception Labs hostname."""
-        host = MERCURY_BASE_URL.replace('https://', '').split('/')[0]
+    def test_dns_resolution_openrouter(self):
+        """DNS can resolve OpenRouter API hostname."""
+        host = OPENROUTER_BASE_URL.replace('https://', '').split('/')[0]
         try:
             socket.gethostbyname(host)
         except socket.gaierror as e:
             pytest.fail(f"DNS resolution failed for {host}: {e}")
 
-    def test_tcp_connectivity_anthropic(self):
-        """Can establish TCP connection to Anthropic API on port 443."""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(10)
-            sock.connect(('api.anthropic.com', 443))
-            sock.close()
-        except Exception as e:
-            pytest.fail(f"Cannot connect to api.anthropic.com:443: {e}")
-
-    def test_tcp_connectivity_mercury(self):
-        """Can establish TCP connection to Mercury API on port 443."""
-        host = MERCURY_BASE_URL.replace('https://', '').split('/')[0]
+    def test_tcp_connectivity_openrouter(self):
+        """Can establish TCP connection to OpenRouter API on port 443."""
+        host = OPENROUTER_BASE_URL.replace('https://', '').split('/')[0]
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(10)
@@ -77,94 +56,58 @@ class TestNetworkConnectivity:
 # API Authentication Tests (makes real API calls)
 # ─────────────────────────────────────────────────────────────
 
-class TestAnthropicAPI:
-    """Verify Anthropic API accepts the configured key."""
+class TestOpenRouterAPI:
+    """Verify OpenRouter API accepts the configured key."""
 
-    def test_anthropic_api_key_valid(self):
-        """Anthropic API returns success for the configured key.
+    def test_openrouter_api_key_valid_claude(self):
+        """OpenRouter API returns success for Claude model."""
+        if not OPENROUTER_API_KEY:
+            pytest.skip("OPENROUTER_API_KEY not configured in .env")
         
-        Uses claude-3-haiku-4-20250514 (cheapest model) for testing.
-        """
-        if not ANTHROPIC_API_KEY:
-            pytest.skip("ANTHROPIC_API_KEY not configured in .env")
-        
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-3-haiku-4-20250514",
+        from openai import OpenAI
+        client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+        message = client.chat.completions.create(
+            model="anthropic/claude-3.5-sonnet",
             max_tokens=10,
             messages=[{"role": "user", "content": "hi"}]
         )
-        assert message.content[0].text
-        assert len(message.content[0].text) > 0
+        assert message.choices[0].message.content
+        assert len(message.choices[0].message.content) > 0
 
-    def test_anthropic_credits_available(self):
-        """Verify Anthropic API has credits available."""
-        if not ANTHROPIC_API_KEY:
-            pytest.skip("ANTHROPIC_API_KEY not configured in .env")
-        
-        import anthropic
-        from exceptions import AnthropicCreditError
-        
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        try:
-            message = client.messages.create(
-                model="claude-3-haiku-4-20250514",
-                max_tokens=10,
-                messages=[{"role": "user", "content": "test"}]
-            )
-            assert message.content[0].text
-        except Exception as e:
-            error_str = str(e).lower()
-            if "credit" in error_str or "quota" in error_str or "insufficient" in error_str:
-                pytest.fail(f"Anthropic API has insufficient credits: {e}")
-            raise
-
-
-class TestMercuryAPI:
-    """Verify Mercury/Inception Labs API accepts the configured key."""
-
-    def test_mercury_api_key_valid(self):
-        """Mercury API returns success for the configured key.
-        
-        Mercury models are fast/costless for small prompts.
-        """
-        if not MERCURY_API_KEY:
-            pytest.skip("MERCURY_API_KEY not configured in .env")
+    def test_openrouter_api_key_valid_mercury(self):
+        """OpenRouter API returns success for Mercury model."""
+        if not OPENROUTER_API_KEY:
+            pytest.skip("OPENROUTER_API_KEY not configured in .env")
         
         from openai import OpenAI
-        client = OpenAI(api_key=MERCURY_API_KEY, base_url=MERCURY_BASE_URL)
-        completion = client.chat.completions.create(
-            model="mercury-2",
+        client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
+        message = client.chat.completions.create(
+            model="inception-ai/Mercury-2",
             max_tokens=10,
             messages=[{"role": "user", "content": "hello"}]
         )
-        # Mercury-2 may return empty content for minimal prompts, just verify call succeeded
-        assert completion is not None
-        assert completion.choices is not None
+        assert message is not None
 
-    def test_mercury_credits_available(self):
-        """Verify Mercury API has credits available."""
-        if not MERCURY_API_KEY:
-            pytest.skip("MERCURY_API_KEY not configured in .env")
+    def test_openrouter_credits_available(self):
+        """Verify OpenRouter API has credits available."""
+        if not OPENROUTER_API_KEY:
+            pytest.skip("OPENROUTER_API_KEY not configured in .env")
         
         from openai import OpenAI
         from openai import APIError as OpenAIAPIError
-        from exceptions import MercuryCreditError
         
-        client = OpenAI(api_key=MERCURY_API_KEY, base_url=MERCURY_BASE_URL)
+        client = OpenAI(api_key=OPENROUTER_API_KEY, base_url=OPENROUTER_BASE_URL)
         try:
-            completion = client.chat.completions.create(
-                model="mercury-2",
+            message = client.chat.completions.create(
+                model="anthropic/claude-3.5-sonnet",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "test"}]
             )
-            # Mercury-2 may return empty content, verify call succeeded
-            assert completion is not None
+            assert message.choices[0].message.content
         except OpenAIAPIError as e:
             error_str = str(e).lower()
             if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
-                pytest.fail(f"Mercury API has insufficient credits: {e}")
+                pytest.fail(f"OpenRouter API has insufficient credits: {e}")
             raise
 
 
@@ -183,5 +126,5 @@ class TestCreditCheckEndpoint:
         
         assert result.anthropic is not None
         assert result.mercury is not None
-        assert result.anthropic.provider == "Anthropic"
-        assert result.mercury.provider == "Mercury/Inception Labs"
+        assert "OpenRouter" in result.anthropic.provider
+        assert "OpenRouter" in result.mercury.provider

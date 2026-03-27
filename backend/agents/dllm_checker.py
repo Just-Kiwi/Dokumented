@@ -3,7 +3,7 @@ dLLM Agent using Mercury 2 for field validation.
 """
 from openai import OpenAI
 from openai import APIError as OpenAIAPIError, AuthenticationError as OpenAIAuthError
-from config import MERCURY_API_KEY, MERCURY_BASE_URL
+from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 import json
 from typing import Optional, Dict, List
 from exceptions import MercuryCreditError
@@ -13,11 +13,11 @@ class dLLMChecker:
     """Mercury dLLM-based checker for field completeness validation."""
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
-        """Initialize Mercury OpenAI-compatible client."""
-        key = api_key or MERCURY_API_KEY
-        url = base_url or MERCURY_BASE_URL
+        """Initialize OpenRouter client."""
+        key = api_key or OPENROUTER_API_KEY
+        url = base_url or OPENROUTER_BASE_URL
         self.client = OpenAI(api_key=key, base_url=url)
-        self.model = "mercury-2"
+        self.model = "inception-ai/Mercury-2"
 
     def check_fields(self, raw_text: str, extracted_json: Dict, schema: List[Dict]) -> Dict:
         """

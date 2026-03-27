@@ -9,9 +9,8 @@ import os
 load_dotenv()
 
 # API Keys (sensitive - read from environment only)
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
-MERCURY_API_KEY = os.getenv('MERCURY_API_KEY', '')
-MERCURY_BASE_URL = os.getenv('MERCURY_BASE_URL', 'https://api.inceptionlabs.ai/v1')
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
+OPENROUTER_BASE_URL = os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1')
 
 # Database
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./dokumented.db')
@@ -37,19 +36,14 @@ def get_config() -> dict:
     API keys are masked for safe display.
     """
     return {
-        "ANTHROPIC_API_KEY": {
-            "value": mask_api_key(ANTHROPIC_API_KEY),
-            "configured": bool(ANTHROPIC_API_KEY),
+        "OPENROUTER_API_KEY": {
+            "value": mask_api_key(OPENROUTER_API_KEY),
+            "configured": bool(OPENROUTER_API_KEY),
             "source": "environment"
         },
-        "MERCURY_API_KEY": {
-            "value": mask_api_key(MERCURY_API_KEY),
-            "configured": bool(MERCURY_API_KEY),
-            "source": "environment"
-        },
-        "MERCURY_BASE_URL": {
-            "value": MERCURY_BASE_URL,
-            "configured": bool(MERCURY_BASE_URL),
+        "OPENROUTER_BASE_URL": {
+            "value": OPENROUTER_BASE_URL,
+            "configured": bool(OPENROUTER_BASE_URL),
             "source": "environment"
         },
         "MAX_RETRIES": {

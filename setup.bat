@@ -1,4 +1,6 @@
 @echo off
+setlocal enabledelayedexpansion
+
 echo.
 echo ========================================
 echo   Dokumented Setup - Windows
@@ -36,18 +38,22 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt --quiet
 echo Backend dependencies installed
 
+setlocal enabledelayedexpansion
+
 REM Create .env file
-if not exist .env (
+set CREATE_ENV=y
+if exist .env (
+    set /p CREATE_ENV=" .env already exists. Overwrite? (y/N): "
+)
+if /i "%CREATE_ENV%"=="y" (
     echo.
-    echo Please enter your API keys:
-    set /p ANTHROPIC_KEY="Enter ANTHROPIC_API_KEY: "
-    set /p MERCURY_KEY="Enter MERCURY_API_KEY: "
+    echo Please enter your API key:
+    set /p OPENROUTER_KEY="Enter OPENROUTER_API_KEY: "
     
     (
         echo # API Keys
-        echo ANTHROPIC_API_KEY=%ANTHROPIC_KEY%
-        echo MERCURY_API_KEY=%MERCURY_KEY%
-        echo MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1
+        echo OPENROUTER_API_KEY=!OPENROUTER_KEY!
+        echo OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
         echo.
         echo # Database
         echo DATABASE_URL=sqlite:///./dokumented.db
@@ -59,8 +65,10 @@ if not exist .env (
     ) > .env
     echo .env file created
 ) else (
-    echo .env file already exists
+    echo .env file already exists - skipping
 )
+
+endlocal
 
 cd ..
 
@@ -97,4 +105,5 @@ echo API Documentation: http://localhost:8000/docs
 echo.
 echo First-time setup: Your API keys were saved in backend/.env
 echo.
+endlocal
 pause

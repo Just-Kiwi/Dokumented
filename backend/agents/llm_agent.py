@@ -1,9 +1,9 @@
 """
 LLM Agent using Claude Sonnet for fingerprinting and script generation.
 """
-import anthropic
-from anthropic import APIError as AnthropicAPIError, RateLimitError, AuthenticationError
-from config import ANTHROPIC_API_KEY
+from openai import OpenAI
+from openai import APIError as OpenAIAPIError
+from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 import json
 from typing import Tuple, Optional
 from exceptions import AnthropicCreditError, APITimeoutError, APIAuthenticationError
@@ -12,11 +12,12 @@ from exceptions import AnthropicCreditError, APITimeoutError, APIAuthenticationE
 class LLMAgent:
     """Claude-based agent for fingerprinting and script generation."""
 
-    def __init__(self, api_key: Optional[str] = None):
-        """Initialize Claude client."""
-        key = api_key or ANTHROPIC_API_KEY
-        self.client = anthropic.Anthropic(api_key=key)
-        self.model = "claude-sonnet-4-6"
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        """Initialize OpenRouter client."""
+        key = api_key or OPENROUTER_API_KEY
+        url = base_url or OPENROUTER_BASE_URL
+        self.client = OpenAI(api_key=key, base_url=url)
+        self.model = "anthropic/claude-3.5-sonnet"
 
     def fingerprint(self, raw_text: str) -> str:
         """
@@ -37,15 +38,15 @@ Document text (first 1000 chars):
 Return ONLY the fingerprint string, nothing else."""
 
         try:
-            message = self.client.messages.create(
+            message = self.client.chat.completions.create(
                 model=self.model,
                 max_tokens=50,
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            fingerprint = message.content[0].text.strip().lower()
+            fingerprint = message.choices[0].message.content.strip().lower()
             return fingerprint
-        except AnthropicAPIError as e:
+        except OpenAIAPIError as e:
             if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
                 raise AnthropicCreditError(str(e))
             raise
@@ -94,13 +95,13 @@ result = {{
 Write only the Python script, no explanation."""
 
         try:
-            message = self.client.messages.create(
+            message = self.client.chat.completions.create(
                 model=self.model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            script = message.content[0].text.strip()
+            script = message.choices[0].message.content.strip()
             # Remove markdown code blocks if present
             if script.startswith("```python"):
                 script = script[9:]
@@ -110,7 +111,7 @@ Write only the Python script, no explanation."""
                 script = script[:-3]
             
             return script.strip()
-        except AnthropicAPIError as e:
+        except OpenAIAPIError as e:
             if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
                 raise AnthropicCreditError(str(e))
             raise
@@ -155,13 +156,13 @@ Requirements:
 Revised script:"""
 
         try:
-            message = self.client.messages.create(
+            message = self.client.chat.completions.create(
                 model=self.model,
                 max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}]
             )
             
-            script = message.content[0].text.strip()
+            script = message.choices[0].message.content.strip()
             # Remove markdown code blocks if present
             if script.startswith("```python"):
                 script = script[9:]
@@ -171,7 +172,7 @@ Revised script:"""
                 script = script[:-3]
             
             return script.strip()
-        except AnthropicAPIError as e:
+        except OpenAIAPIError as e:
             if "credit" in str(e).lower() or "quota" in str(e).lower() or "insufficient" in str(e).lower():
                 raise AnthropicCreditError(str(e))
             raise

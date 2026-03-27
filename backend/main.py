@@ -16,11 +16,10 @@ from models.schemas import (
 from services.pipeline import ExtractionPipeline
 from parsers.doc_parser import DocumentParser
 from config import (
-    UPLOAD_FOLDER, ANTHROPIC_API_KEY, MERCURY_API_KEY, MERCURY_BASE_URL,
+    UPLOAD_FOLDER, OPENROUTER_API_KEY, OPENROUTER_BASE_URL,
     MAX_RETRIES, CONFIDENCE_THRESHOLD, get_config, mask_api_key
 )
 from exceptions import AnthropicCreditError, MercuryCreditError, APIError
-import anthropic
 from openai import OpenAI
 import os
 import asyncio
@@ -110,26 +109,27 @@ def check_credits():
     Makes minimal test API calls to verify credits are available.
     """
     def check_anthropic():
-        """Check Anthropic API credits."""
-        api_key = ANTHROPIC_API_KEY
+        """Check OpenRouter credits for Claude."""
+        api_key = OPENROUTER_API_KEY
+        base_url = OPENROUTER_BASE_URL
         
         if not api_key:
             return CreditCheckStatus(
-                provider="Anthropic",
+                provider="OpenRouter (Claude)",
                 configured=False,
                 has_credits=False,
-                error="API key not configured. Set ANTHROPIC_API_KEY in .env file."
+                error="API key not configured. Set OPENROUTER_API_KEY in .env file."
             )
         
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-            client.messages.create(
-                model="claude-3-haiku-4-20250514",
+            client = OpenAI(api_key=api_key, base_url=base_url)
+            client.chat.completions.create(
+                model="anthropic/claude-3.5-sonnet",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "hi"}]
             )
             return CreditCheckStatus(
-                provider="Anthropic",
+                provider="OpenRouter (Claude)",
                 configured=True,
                 has_credits=True
             )
@@ -137,40 +137,40 @@ def check_credits():
             error_str = str(e).lower()
             if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                 return CreditCheckStatus(
-                    provider="Anthropic",
+                    provider="OpenRouter (Claude)",
                     configured=True,
                     has_credits=False,
                     error="Insufficient credits. Add credits to continue."
                 )
             return CreditCheckStatus(
-                provider="Anthropic",
+                provider="OpenRouter (Claude)",
                 configured=True,
                 has_credits=False,
                 error=str(e)
             )
     
     def check_mercury():
-        """Check Mercury/Inception Labs API credits."""
-        api_key = MERCURY_API_KEY
-        base_url = MERCURY_BASE_URL
+        """Check OpenRouter credits for Mercury."""
+        api_key = OPENROUTER_API_KEY
+        base_url = OPENROUTER_BASE_URL
         
         if not api_key:
             return CreditCheckStatus(
-                provider="Mercury/Inception Labs",
+                provider="OpenRouter (Mercury)",
                 configured=False,
                 has_credits=False,
-                error="API key not configured. Set MERCURY_API_KEY in .env file."
+                error="API key not configured. Set OPENROUTER_API_KEY in .env file."
             )
         
         try:
             client = OpenAI(api_key=api_key, base_url=base_url)
             client.chat.completions.create(
-                model="mercury-2",
+                model="inception-ai/Mercury-2",
                 max_tokens=10,
                 messages=[{"role": "user", "content": "hello"}]
             )
             return CreditCheckStatus(
-                provider="Mercury/Inception Labs",
+                provider="OpenRouter (Mercury)",
                 configured=True,
                 has_credits=True
             )
@@ -178,13 +178,13 @@ def check_credits():
             error_str = str(e).lower()
             if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                 return CreditCheckStatus(
-                    provider="Mercury/Inception Labs",
+                    provider="OpenRouter (Mercury)",
                     configured=True,
                     has_credits=False,
                     error="Insufficient credits. Add credits to continue."
                 )
             return CreditCheckStatus(
-                provider="Mercury/Inception Labs",
+                provider="OpenRouter (Mercury)",
                 configured=True,
                 has_credits=False,
                 error=str(e)
@@ -230,21 +230,15 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
     """Extract fields from a document."""
     
     # Get API keys from .env (never from database for security)
-    llm_key = ANTHROPIC_API_KEY
-    dllm_key = MERCURY_API_KEY
-    dllm_url = MERCURY_BASE_URL
+    llm_key = OPENROUTER_API_KEY
+    dllm_key = OPENROUTER_API_KEY
+    dllm_url = OPENROUTER_BASE_URL
     
     # Validate keys are configured
     if not llm_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="ANTHROPIC_API_KEY not configured. Set it in .env file."
-        )
-    
-    if not dllm_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MERCURY_API_KEY not configured. Set it in .env file."
+            detail="OPENROUTER_API_KEY not configured. Set it in .env file."
         )
     
     # Create pipeline

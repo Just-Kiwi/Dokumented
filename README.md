@@ -26,9 +26,8 @@ pip install -r requirements.txt
 
 Create `.env` file in the backend directory:
 ```
-ANTHROPIC_API_KEY=sk-ant-your-key
-MERCURY_API_KEY=your-mercury-key
-MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 ```
 
 Start the backend:
@@ -125,17 +124,17 @@ dokumented/
 
 ## Models & Configuration
 
-### LLM: Claude Sonnet 4.6
-- **Purpose**: Reasoning, script generation, fingerprinting
-- **API**: Anthropic
-- **Env var**: `ANTHROPIC_API_KEY`
+### OpenRouter API (Unified)
+Get your API key from https://openrouter.ai/
 
-### dLLM: Mercury 2
-- **Purpose**: Field validation, holistic coverage check
-- **API**: Inception Labs (OpenAI-compatible)
-- **Env vars**:
-  - `MERCURY_API_KEY`
-  - `MERCURY_BASE_URL=https://api.inceptionlabs.ai/v1`
+| Model | Purpose | Model ID |
+|-------|---------|----------|
+| Claude 3.5 Sonnet | LLM: Reasoning, script generation, fingerprinting | `anthropic/claude-3.5-sonnet` |
+| Mercury 2 | dLLM: Field validation, coverage check | `inception-ai/Mercury-2` |
+
+**Env vars**:
+- `OPENROUTER_API_KEY` - Your OpenRouter API key
+- `OPENROUTER_BASE_URL` - Default: `https://openrouter.ai/api/v1`
 
 ## Database
 

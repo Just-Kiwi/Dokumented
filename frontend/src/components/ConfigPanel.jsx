@@ -34,27 +34,18 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
 
     try {
       const response = await listConfig()
-      const anthropicConfigured = response.data?.ANTHROPIC_API_KEY?.configured
-      const mercuryConfigured = response.data?.MERCURY_API_KEY?.configured
+      const openrouterConfigured = response.data?.OPENROUTER_API_KEY?.configured
       
-      if (!anthropicConfigured) {
-        setMessage('ANTHROPIC_API_KEY not configured.')
-        setIsLoading(false)
-        return
-      }
-      
-      if (!mercuryConfigured) {
-        setCreditStatus({ anthropic: 'configured' })
-        setMessage('Anthropic key configured. MERCURY_API_KEY not configured.')
+      if (!openrouterConfigured) {
+        setMessage('OPENROUTER_API_KEY not configured.')
         setIsLoading(false)
         return
       }
       
       setCreditStatus({
-        anthropic: 'configured',
-        mercury: 'configured'
+        openrouter: 'configured'
       })
-      setMessage('API keys are configured. Credits will be verified when you run an extraction.')
+      setMessage('OpenRouter API key is configured. Credits will be verified when you run an extraction.')
     } catch (error) {
       setMessage(`Error checking configuration: ${error.message}`)
     } finally {
@@ -86,12 +77,12 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
           {hasLoaded && (
             <>
               <div className="config-section">
-                <label>Anthropic API Key (Claude Sonnet)</label>
+                <label>OpenRouter API Key</label>
                 <div className="config-value">
-                  {config.ANTHROPIC_API_KEY?.configured ? (
+                  {config.OPENROUTER_API_KEY?.configured ? (
                     <span className="key-configured">
                       <span className="check-icon">✓</span>
-                      {config.ANTHROPIC_API_KEY.value}
+                      {config.OPENROUTER_API_KEY.value}
                     </span>
                   ) : (
                     <span className="key-not-configured">
@@ -100,33 +91,15 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
                     </span>
                   )}
                 </div>
-                <p className="hint">Set <code>ANTHROPIC_API_KEY</code> in <code>backend/.env</code></p>
+                <p className="hint">Set <code>OPENROUTER_API_KEY</code> in <code>backend/.env</code></p>
               </div>
 
               <div className="config-section">
-                <label>Mercury API Key (Mercury 2)</label>
+                <label>OpenRouter Base URL</label>
                 <div className="config-value">
-                  {config.MERCURY_API_KEY?.configured ? (
-                    <span className="key-configured">
-                      <span className="check-icon">✓</span>
-                      {config.MERCURY_API_KEY.value}
-                    </span>
-                  ) : (
-                    <span className="key-not-configured">
-                      <span className="x-icon">✗</span>
-                      Not configured
-                    </span>
-                  )}
+                  {config.OPENROUTER_BASE_URL?.value || 'https://openrouter.ai/api/v1'}
                 </div>
-                <p className="hint">Set <code>MERCURY_API_KEY</code> in <code>backend/.env</code></p>
-              </div>
-
-              <div className="config-section">
-                <label>Mercury Base URL</label>
-                <div className="config-value">
-                  {config.MERCURY_BASE_URL?.value || 'https://api.inceptionlabs.ai/v1'}
-                </div>
-                <p className="hint">Set <code>MERCURY_BASE_URL</code> in <code>backend/.env</code> to override</p>
+                <p className="hint">Set <code>OPENROUTER_BASE_URL</code> in <code>backend/.env</code> to override</p>
               </div>
 
               <div className="config-section">
@@ -184,10 +157,9 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
             <h3>How to Configure</h3>
             <ol>
               <li>Edit the <code>backend/.env</code> file</li>
-              <li>Add your API keys:
+              <li>Add your API key:
                 <pre>
-{`ANTHROPIC_API_KEY=sk-ant-your-key
-MERCURY_API_KEY=your-mercury-key`}
+{`OPENROUTER_API_KEY=your-openrouter-key`}
                 </pre>
               </li>
               <li>Restart the backend server</li>
@@ -196,15 +168,9 @@ MERCURY_API_KEY=your-mercury-key`}
             <h3>API Documentation</h3>
             <ul>
               <li>
-                <strong>Claude Sonnet:</strong>
-                <a href="https://docs.anthropic.com" target="_blank" rel="noopener noreferrer">
-                  Anthropic Docs
-                </a>
-              </li>
-              <li>
-                <strong>Mercury 2:</strong>
-                <a href="https://docs.inceptionlabs.ai" target="_blank" rel="noopener noreferrer">
-                  Inception Labs Docs
+                <strong>OpenRouter:</strong>
+                <a href="https://openrouter.ai/docs" target="_blank" rel="noopener noreferrer">
+                  OpenRouter Docs
                 </a>
               </li>
             </ul>
