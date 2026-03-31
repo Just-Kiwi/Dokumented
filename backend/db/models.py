@@ -15,6 +15,24 @@ class StatusEnum(str, enum.Enum):
     failed = "failed"
 
 
+class BatchStatusEnum(str, enum.Enum):
+    """Status enum for batch queue."""
+    pending = "pending"
+    processing = "processing"
+    paused = "paused"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
+class BatchFileStatusEnum(str, enum.Enum):
+    """Status enum for individual files in batch."""
+    unprocessed = "unprocessed"
+    processing = "processing"
+    processed = "processed"
+    paused = "paused"
+    cancelled = "cancelled"
+
+
 class OutcomeEnum(str, enum.Enum):
     """Outcome enum for retry log."""
     resolved = "resolved"
@@ -83,5 +101,18 @@ class AppConfig(Base):
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String, unique=True, index=True, nullable=False)
     value = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BatchQueue(Base):
+    """Batch queue for processing multiple files."""
+    __tablename__ = "batch_queue"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(Enum(BatchStatusEnum), default=BatchStatusEnum.pending)
+    current_index = Column(Integer, default=0)
+    files = Column(JSON, default=[])  # Array of {filename, raw_text, status, result_id, error}
+    schema = Column(JSON, default=[])  # Schema used for extraction
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

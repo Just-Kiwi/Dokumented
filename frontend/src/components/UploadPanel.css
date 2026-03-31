@@ -1,0 +1,78 @@
+.upload-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.upload-panel h2 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--text);
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.upload-panel p {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.upload-panel .drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--bg);
+}
+
+.upload-panel .drop-zone:hover {
+  border-color: #2196f3;
+  background: rgba(33, 150, 243, 0.05);
+}
+
+.upload-panel .drop-zone.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.upload-panel .drop-zone p {
+  margin: 4px 0;
+  color: var(--muted);
+}
+
+.upload-panel .file-input-label {
+  display: inline-block;
+  padding: 8px 16px;
+  background: #2196f3;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 8px;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.upload-panel .file-input-label:hover {
+  background: #1976d2;
+}
+
+.upload-panel .supported-formats {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.upload-panel .upload-error {
+  padding: 8px 12px;
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  border-radius: 4px;
+  font-size: 13px;
+}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import './SchemaConfig.css'
 
-export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
+export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading, disabled }) => {
   const [fields, setFields] = useState([
     { name: 'vendor_name', description: 'Name of the vendor/company', required: true },
     { name: 'invoice_date', description: 'Date of the invoice', required: true },
@@ -74,7 +74,7 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
             <button
               onClick={() => handleRemoveField(index)}
               className="remove-btn"
-              disabled={isLoading}
+              disabled={isLoading || disabled}
             >
               Remove
             </button>
@@ -86,7 +86,7 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading }) => {
         <button
           onClick={handleAddField}
           className="add-field-btn"
-          disabled={isLoading}
+          disabled={isLoading || disabled}
         >
           + Add Field
         </button>

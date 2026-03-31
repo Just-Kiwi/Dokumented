@@ -33,7 +33,29 @@ export const getValidationLog = (resultId) => api.get(`/extraction/${resultId}/v
 export const applyOverrides = (resultId, overrides) =>
   api.post(`/extraction/${resultId}/overrides`, { result_id: resultId, overrides })
 
-// Script library endpoints
+export const getConfigList = () => api.get('/config')
+
+export const startBatch = (files, schema) =>
+  api.post('/batch/start', { files, schema: schema || [] })
+
+export const getBatch = (batchId) => api.get(`/batch/${batchId}`)
+
+export const listBatches = () => api.get('/batch')
+
+export const pauseBatch = (batchId) => api.post(`/batch/${batchId}/pause`)
+
+export const resumeBatch = (batchId) => api.post(`/batch/${batchId}/resume`)
+
+export const cancelBatch = (batchId) => api.post(`/batch/${batchId}/cancel`)
+
+export const clearBatch = (batchId) => api.post(`/batch/${batchId}/clear`)
+
+export const processBatch = (batchId) => api.post(`/batch/${batchId}/process`)
+
+export const downloadBatch = (batchId) => api.get(`/batch/${batchId}/download`)
+
+export const downloadSingleResult = (resultId) => api.get(`/extraction/${resultId}`)
+
 export const listScripts = () => api.get('/scripts')
 export const getScript = (scriptId) => api.get(`/scripts/${scriptId}`)
 

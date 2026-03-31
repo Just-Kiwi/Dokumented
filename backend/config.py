@@ -19,6 +19,8 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./dokumented.db')
 MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', '0.75'))
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', './documents')
+MAX_BATCH_SIZE = int(os.getenv('MAX_BATCH_SIZE', '25'))
+BATCH_DOWNLOAD_MODE = os.getenv('BATCH_DOWNLOAD_MODE', 'combined')
 
 
 def mask_api_key(key: str) -> str:
@@ -63,6 +65,16 @@ def get_config() -> dict:
         },
         "UPLOAD_FOLDER": {
             "value": UPLOAD_FOLDER,
+            "configured": True,
+            "source": "environment"
+        },
+        "MAX_BATCH_SIZE": {
+            "value": str(MAX_BATCH_SIZE),
+            "configured": True,
+            "source": "environment"
+        },
+        "BATCH_DOWNLOAD_MODE": {
+            "value": BATCH_DOWNLOAD_MODE,
             "configured": True,
             "source": "environment"
         }

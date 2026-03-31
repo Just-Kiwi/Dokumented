@@ -105,3 +105,39 @@ class CreditCheckResponse(BaseModel):
     """Response from credit check endpoint."""
     anthropic: CreditCheckStatus
     mercury: CreditCheckStatus
+
+
+# Batch processing schemas
+class BatchFileRequest(BaseModel):
+    """Request for a single file in batch."""
+    filename: str
+    raw_text: str
+
+
+class BatchStartRequest(BaseModel):
+    """Request to start batch extraction."""
+    files: List[BatchFileRequest]
+    schema: Optional[List[FieldDefinition]] = None
+
+
+class BatchFileStatus(BaseModel):
+    """Status of a single file in batch."""
+    filename: str
+    status: str  # 'unprocessed', 'processing', 'processed', 'paused', 'cancelled'
+    result_id: Optional[int] = None
+    error: Optional[str] = None
+
+
+class BatchResponse(BaseModel):
+    """Response for batch operations."""
+    batch_id: int
+    status: str
+    current_index: int
+    files: List[BatchFileStatus]
+    total_files: int
+    processed_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

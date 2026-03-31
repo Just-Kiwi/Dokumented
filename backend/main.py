@@ -8,17 +8,19 @@ from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from db.database import get_db, init_db
-from db.models import ExtractionResult, ScriptLibrary
+from db.models import ExtractionResult, ScriptLibrary, BatchQueue, StatusEnum, BatchStatusEnum
 from models.schemas import (
     SchemaRequest, ExtractRequest,
     HumanOverridesRequest, ExtractionReportResponse, WSEvent,
-    CreditCheckResponse, CreditCheckStatus
+    CreditCheckResponse, CreditCheckStatus,
+    BatchStartRequest, BatchResponse, BatchFileStatus
 )
 from services.pipeline import ExtractionPipeline, PipelineError
 from parsers.doc_parser import DocumentParser
 from config import (
     UPLOAD_FOLDER, OPENROUTER_API_KEY, OPENROUTER_BASE_URL,
-    MAX_RETRIES, CONFIDENCE_THRESHOLD, get_config, mask_api_key
+    MAX_RETRIES, CONFIDENCE_THRESHOLD, get_config, mask_api_key,
+    MAX_BATCH_SIZE, BATCH_DOWNLOAD_MODE
 )
 from exceptions import AnthropicCreditError, MercuryCreditError, APIError, APITimeoutError, APIAuthenticationError
 from openai import OpenAI
@@ -393,6 +395,329 @@ def get_script(script_id: int, db: Session = Depends(get_db)):
         "version": script.version,
         "success_count": script.success_count,
         "fail_count": script.fail_count
+    }
+
+
+# Batch processing endpoints
+@app.post("/api/batch/start")
+async def start_batch(request: BatchStartRequest, db: Session = Depends(get_db)):
+    """Start a batch extraction process."""
+    if len(request.files) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum batch size is {MAX_BATCH_SIZE} files"
+        )
+    
+    files_data = [
+        {
+            "filename": f.filename,
+            "raw_text": f.raw_text,
+            "status": "unprocessed",
+            "result_id": None,
+            "error": None
+        }
+        for f in request.files
+    ]
+    
+    schema_data = [f.model_dump() for f in (request.schema or [])]
+    
+    batch = BatchQueue(
+        status=BatchStatusEnum.pending,
+        files=files_data,
+        schema=schema_data
+    )
+    db.add(batch)
+    db.commit()
+    db.refresh(batch)
+    
+    return {"batch_id": batch.id, "status": "pending", "total_files": len(files_data)}
+
+
+@app.get("/api/batch/{batch_id}")
+def get_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Get batch status and results."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    processed_count = sum(1 for f in batch.files if f.get("status") == "processed")
+    
+    return {
+        "batch_id": batch.id,
+        "status": batch.status.value,
+        "current_index": batch.current_index,
+        "files": batch.files,
+        "total_files": len(batch.files),
+        "processed_count": processed_count,
+        "created_at": batch.created_at,
+        "updated_at": batch.updated_at
+    }
+
+
+@app.post("/api/batch/{batch_id}/pause")
+def pause_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Pause a batch processing."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    if batch.status != BatchStatusEnum.processing:
+        raise HTTPException(status_code=400, detail="Batch is not currently processing")
+    
+    batch.status = BatchStatusEnum.paused
+    
+    if batch.current_index < len(batch.files):
+        batch.files[batch.current_index]["status"] = "paused"
+    
+    db.commit()
+    
+    return {"batch_id": batch.id, "status": batch.status.value}
+
+
+@app.post("/api/batch/{batch_id}/resume")
+def resume_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Resume a paused batch."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    if batch.status != BatchStatusEnum.paused:
+        raise HTTPException(status_code=400, detail="Batch is not paused")
+    
+    batch.status = BatchStatusEnum.processing
+    
+    if batch.current_index < len(batch.files):
+        batch.files[batch.current_index]["status"] = "processing"
+    
+    db.commit()
+    
+    return {"batch_id": batch.id, "status": batch.status.value}
+
+
+@app.post("/api/batch/{batch_id}/cancel")
+def cancel_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Cancel a batch processing."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    batch.status = BatchStatusEnum.cancelled
+    
+    for i in range(batch.current_index, len(batch.files)):
+        batch.files[i]["status"] = "cancelled"
+    
+    db.commit()
+    
+    return {"batch_id": batch.id, "status": batch.status.value}
+
+
+@app.post("/api/batch/{batch_id}/clear")
+def clear_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Clear a batch from database."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    db.delete(batch)
+    db.commit()
+    
+    return {"status": "cleared"}
+
+
+@app.post("/api/batch/{batch_id}/process")
+async def process_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Process a batch (runs the extraction for all files)."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    if batch.status == BatchStatusEnum.completed:
+        raise HTTPException(status_code=400, detail="Batch already completed")
+    
+    llm_key = OPENROUTER_API_KEY
+    dllm_key = OPENROUTER_API_KEY
+    dllm_url = OPENROUTER_BASE_URL
+    
+    if not llm_key:
+        raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not configured")
+    
+    pipeline = ExtractionPipeline(
+        db,
+        llm_api_key=llm_key,
+        dllm_api_key=dllm_key,
+        dllm_base_url=dllm_url
+    )
+    
+    schema = batch.schema or []
+    batch.status = BatchStatusEnum.processing
+    db.commit()
+    
+    while batch.current_index < len(batch.files):
+        if batch.status == BatchStatusEnum.cancelled:
+            break
+        
+        while batch.status == BatchStatusEnum.paused:
+            await asyncio.sleep(1)
+            db.refresh(batch)
+            if batch.status == BatchStatusEnum.cancelled:
+                break
+        
+        if batch.status == BatchStatusEnum.cancelled:
+            break
+        
+        file_data = batch.files[batch.current_index]
+        file_data["status"] = "processing"
+        db.commit()
+        
+        try:
+            result_id = await pipeline.extract(
+                file_data["filename"],
+                file_data["raw_text"],
+                schema,
+                events_callback=emit_event
+            )
+            
+            file_data["status"] = "processed"
+            file_data["result_id"] = result_id
+            file_data["error"] = None
+            
+        except Exception as e:
+            logger.error(f"Failed to process file {file_data['filename']}: {e}")
+            file_data["status"] = "cancelled"
+            file_data["error"] = str(e)
+        
+        batch.current_index += 1
+        db.commit()
+    
+    if batch.status != BatchStatusEnum.cancelled:
+        batch.status = BatchStatusEnum.completed
+    
+    db.commit()
+    
+    return {
+        "batch_id": batch.id,
+        "status": batch.status.value,
+        "processed_count": sum(1 for f in batch.files if f.get("status") == "processed")
+    }
+    """Download batch results as JSON."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    if BATCH_DOWNLOAD_MODE == "single":
+        results = []
+        for f in batch.files:
+            if f.get("status") == "processed" and f.get("result_id"):
+                result = db.query(ExtractionResult).filter_by(id=f["result_id"]).first()
+                if result:
+                    results.append({
+                        "filename": f["filename"],
+                        "extracted_json": result.extracted_json,
+                        "status": result.status.value
+                    })
+        return {"files": results}
+    else:
+        combined = {}
+        for f in batch.files:
+            if f.get("status") == "processed" and f.get("result_id"):
+                result = db.query(ExtractionResult).filter_by(id=f["result_id"]).first()
+                if result:
+                    combined[f["filename"]] = result.extracted_json
+        return combined
+
+
+@app.get("/api/batch")
+def list_batches(db: Session = Depends(get_db)):
+    """List all batches."""
+    batches = db.query(BatchQueue).order_by(BatchQueue.created_at.desc()).all()
+    return [
+        {
+            "batch_id": b.id,
+            "status": b.status.value,
+            "current_index": b.current_index,
+            "total_files": len(b.files),
+            "processed_count": sum(1 for f in b.files if f.get("status") == "processed"),
+            "created_at": b.created_at,
+            "updated_at": b.updated_at
+        }
+        for b in batches
+    ]
+
+
+@app.post("/api/batch/{batch_id}/process")
+async def process_batch(batch_id: int, db: Session = Depends(get_db)):
+    """Process a batch (runs the extraction for all files)."""
+    batch = db.query(BatchQueue).filter_by(id=batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    
+    if batch.status == BatchStatusEnum.completed:
+        raise HTTPException(status_code=400, detail="Batch already completed")
+    
+    llm_key = OPENROUTER_API_KEY
+    dllm_key = OPENROUTER_API_KEY
+    dllm_url = OPENROUTER_BASE_URL
+    
+    if not llm_key:
+        raise HTTPException(status_code=400, detail="OPENROUTER_API_KEY not configured")
+    
+    pipeline = ExtractionPipeline(
+        db,
+        llm_api_key=llm_key,
+        dllm_api_key=dllm_key,
+        dllm_base_url=dllm_url
+    )
+    
+    schema = batch.schema or []
+    batch.status = BatchStatusEnum.processing
+    db.commit()
+    
+    while batch.current_index < len(batch.files):
+        if batch.status == BatchStatusEnum.cancelled:
+            break
+        
+        while batch.status == BatchStatusEnum.paused:
+            await asyncio.sleep(1)
+            db.refresh(batch)
+            if batch.status == BatchStatusEnum.cancelled:
+                break
+        
+        if batch.status == BatchStatusEnum.cancelled:
+            break
+        
+        file_data = batch.files[batch.current_index]
+        file_data["status"] = "processing"
+        db.commit()
+        
+        try:
+            result_id = await pipeline.extract(
+                file_data["filename"],
+                file_data["raw_text"],
+                schema,
+                events_callback=emit_event
+            )
+            
+            file_data["status"] = "processed"
+            file_data["result_id"] = result_id
+            file_data["error"] = None
+            
+        except Exception as e:
+            logger.error(f"Failed to process file {file_data['filename']}: {e}")
+            file_data["status"] = "cancelled"
+            file_data["error"] = str(e)
+        
+        batch.current_index += 1
+        db.commit()
+    
+    if batch.status != BatchStatusEnum.cancelled:
+        batch.status = BatchStatusEnum.completed
+    
+    db.commit()
+    
+    return {
+        "batch_id": batch.id,
+        "status": batch.status.value,
+        "processed_count": sum(1 for f in batch.files if f.get("status") == "processed")
     }
 
 
