@@ -130,6 +130,14 @@
   background: #45a049;
 }
 
+.extract-btn.re-extract {
+  background: #ff9800;
+}
+
+.extract-btn.re-extract:hover {
+  background: #e68900;
+}
+
 .add-field-btn:disabled,
 .extract-btn:disabled {
   background: var(--border);

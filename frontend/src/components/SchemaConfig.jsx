@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import './SchemaConfig.css'
 
-export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading, disabled }) => {
+export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading, disabled, batchStatus }) => {
   const [fields, setFields] = useState([
     { name: 'vendor_name', description: 'Name of the vendor/company', required: true },
     { name: 'invoice_date', description: 'Date of the invoice', required: true },
@@ -92,10 +92,10 @@ export const SchemaConfig = ({ onSchemaChange, onExtract, isLoading, disabled })
         </button>
         <button
           onClick={handleExtract}
-          className="extract-btn"
+          className={`extract-btn ${batchStatus === 'completed' ? 're-extract' : ''}`}
           disabled={isLoading || fields.length === 0}
         >
-          {isLoading ? 'Extracting...' : 'Start Extraction'}
+          {isLoading ? 'Extracting...' : batchStatus === 'completed' ? 'Re-extract' : 'Start Extraction'}
         </button>
       </div>
     </div>

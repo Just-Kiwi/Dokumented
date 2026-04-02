@@ -146,11 +146,15 @@ function App() {
   const handleStartExtraction = async () => {
     if (!batchId) return
     setIsProcessing(true)
+    setResults({})
     try {
       await processBatch(batchId)
       loadBatch(batchId)
     } catch (e) {
       setIsProcessing(false)
+      if (e.response?.status === 400 && e.response?.data?.detail?.includes('already completed')) {
+        return
+      }
       setError(`Processing failed: ${e.message}`)
     }
   }
@@ -300,6 +304,7 @@ function App() {
                 onExtract={handleStartExtraction}
                 isLoading={isProcessing}
                 disabled={files.length === 0}
+                batchStatus={batchStatus}
               />
               
               <BatchResultsTab
