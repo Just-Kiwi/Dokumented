@@ -22,6 +22,12 @@ class ScriptRunner:
         Returns:
             Dictionary with extracted field values
         """
+        # Validate script before execution
+        is_valid, error_msg = ScriptRunner.validate_script(script_body)
+        if not is_valid:
+            print(f"Script validation error: {error_msg}")
+            return {}
+        
         import re
         import json
         from datetime import datetime, date

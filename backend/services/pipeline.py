@@ -50,11 +50,15 @@ class ExtractionPipeline:
 
     def get_best_script(self):
         """Get the script with the highest success count."""
-        return self.db.query(ScriptLibrary).order_by(ScriptLibrary.success_count.desc()).first()
+        script = self.db.query(ScriptLibrary).order_by(ScriptLibrary.success_count.desc()).first()
+        logger.info(f"[DEBUG get_best_script] Found: {script}")
+        return script
 
     def create_new_script(self, raw_text: str, schema: List[Dict]) -> ScriptLibrary:
         """Create a new extraction script using LLM."""
+        logger.info(f"[DEBUG create_new_script] schema={schema}")
         script_body = self.llm_agent.write_script(raw_text, schema)
+        logger.info(f"[DEBUG create_new_script] Generated script body: {script_body[:200]}...")
         script = ScriptLibrary(
             script_body=script_body,
             version=1
@@ -62,7 +66,41 @@ class ExtractionPipeline:
         self.db.add(script)
         self.db.commit()
         self.db.refresh(script)
+        logger.info(f"[DEBUG create_new_script] Script saved to DB with id={script.id}")
         return script
+    
+    def fix_script_syntax(self, script_body: str, error: SyntaxError) -> str:
+        """Attempt to fix common syntax errors in generated scripts."""
+        import re
+        
+        fixed = script_body
+        
+        # Fix unterminated strings - add closing quote
+        if "unterminated string literal" in str(error):
+            lines = fixed.split('\n')
+            for i, line in enumerate(lines):
+                quote_count = line.count("'") - line.count("\\'")
+                if quote_count % 2 != 0:
+                    lines[i] = line + "'"
+            fixed = '\n'.join(lines)
+        
+        # Fix missing colons after if/for/while/def
+        for keyword in ['if ', 'for ', 'while ', 'def ']:
+            pattern = keyword + r'([^\n:]+)\n'
+            replacement = keyword + r'\1:\n'
+            fixed = re.sub(pattern, replacement, fixed)
+        
+        # Fix missing closing brackets
+        open_parens = fixed.count('(') - fixed.count(')')
+        open_brackets = fixed.count('[') - fixed.count(']')
+        open_braces = fixed.count('{') - fixed.count('}')
+        
+        fixed = fixed + ')' * max(0, open_parens)
+        fixed = fixed + ']' * max(0, open_brackets)
+        fixed = fixed + '}' * max(0, open_braces)
+        
+        logger.info(f"Attempted to fix script syntax, result: {fixed[:200]}...")
+        return fixed
 
     async def extract(self, filename: str, raw_text: str, schema: List[Dict],
                      events_callback=None) -> int:
@@ -90,12 +128,26 @@ class ExtractionPipeline:
         try:
             # Step 1: Get best script or create new
             logger.info(f"Starting extraction for {filename}")
+            logger.info(f"[DEBUG extract] schema length: {len(schema)}")
+            
+            # Fallback to default schema if empty
+            if not schema:
+                logger.warning("Empty schema in extract(), using default fields")
+                schema = [
+                    {"name": "vendor_name", "description": "Name of vendor", "required": True},
+                    {"name": "invoice_date", "description": "Invoice date", "required": True},
+                    {"name": "invoice_total", "description": "Total amount", "required": True},
+                    {"name": "invoice_number", "description": "Invoice number", "required": True}
+                ]
+                logger.info(f"[DEBUG extract] Using default schema with {len(schema)} fields")
+            
             script = self.get_best_script()
             
             if script:
                 emit("script_found", {"version": script.version})
                 logger.info(f"Found existing script v{script.version} (success_count={script.success_count})")
             else:
+                logger.info("[DEBUG extract] No existing script, creating new one")
                 script = self.create_new_script(raw_text, schema)
                 emit("script_written", {"version": script.version})
                 logger.info(f"Created new script v{script.version}")
@@ -103,6 +155,22 @@ class ExtractionPipeline:
             # Step 2-7: Execute with retry loop
             for attempt in range(1, self.max_retries + 1):
                 logger.info(f"Extraction attempt {attempt}/{self.max_retries}")
+                
+                # Validate script before execution
+                try:
+                    import ast
+                    ast.parse(script.script_body)
+                    logger.info("Script syntax validated successfully")
+                except SyntaxError as se:
+                    logger.error(f"Script has syntax error: {se}")
+                    script.script_body = self.fix_script_syntax(script.script_body, se)
+                    try:
+                        ast.parse(script.script_body)
+                        logger.info("Script syntax fixed and validated")
+                    except SyntaxError as se2:
+                        logger.error(f"Could not fix script syntax: {se2}")
+                        emit("error", {"step": "script_validation", "attempt": attempt, "error": str(se2)})
+                        continue
                 
                 # Execute script
                 try:
@@ -231,11 +299,15 @@ class ExtractionPipeline:
             return result.id
 
         except (AnthropicCreditError, MercuryCreditError, APIError):
+            logger.error(f">>> API Error caught: {type(e).__name__}: {e}")
             raise
         except ScriptGenerationError:
+            logger.error(f">>> ScriptGenerationError caught: {e}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected pipeline error: {e}")
+            logger.error(f">>> Unexpected pipeline error: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f">>> Traceback: {traceback.format_exc()}")
             emit("error", {"step": "unknown", "error": str(e)})
             
             # Save failed result if we have partial data

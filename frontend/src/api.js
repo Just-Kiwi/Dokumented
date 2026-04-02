@@ -35,8 +35,8 @@ export const applyOverrides = (resultId, overrides) =>
 
 export const getConfigList = () => api.get('/config')
 
-export const startBatch = (files, schema) =>
-  api.post('/batch/start', { files, schema: schema || [] })
+export const startBatch = (files, field_definitions) =>
+  api.post('/batch/start', { files, field_definitions: field_definitions || [] })
 
 export const getBatch = (batchId) => api.get(`/batch/${batchId}`)
 

@@ -3,7 +3,9 @@ LLM Agent using Claude Sonnet for script generation and revision.
 """
 import logging
 from openai import OpenAI
-from openai import APIError as OpenAIAPIError, RateLimitError, Timeout as OpenAITimeout
+from openai import APIError as OpenAIAPIError
+from openai import RateLimitError
+from openai import Timeout as OpenAITimeout
 from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 import json
 from typing import Tuple, Optional
@@ -21,7 +23,7 @@ class LLMAgent:
         key = api_key or OPENROUTER_API_KEY
         url = base_url or OPENROUTER_BASE_URL
         self.client = OpenAI(api_key=key, base_url=url)
-        self.model = "anthropic/claude-3.5-sonnet"
+        self.model = "anthropic/claude-3-haiku"
         self.max_retries = 2
 
     def write_script(self, raw_text: str, schema: list) -> str:
@@ -54,31 +56,28 @@ Target fields to extract:
 Document text to extract from:
 {raw_text[:3000]}
 
-Requirements:
-1. Return a Python script that uses only built-in libraries (re, json, datetime)
-2. The script receives the document text in variable 'raw_text'
-3. The script must populate a 'result' dict with the extracted fields
-4. Use string operations and regex to find field values
-5. Return None for fields that cannot be found
-6. Field names should match the target schema exactly
+IMPORTANT: Output ONLY raw Python code. Do NOT wrap your code in markdown code blocks (no ```python or ```). Start directly with the Python code.
 
-Example structure:
-```python
-import re
-import json
-from datetime import datetime
+Requirements - STRICTLY FOLLOW:
+1. Use ONLY 're' module for regex - available as 're' in scope
+2. Use ONLY 'json' module for JSON parsing - available as 'json' in scope  
+3. Use ONLY 'datetime' module - available as 'datetime' in scope
+4. DO NOT use: import, from, __import__, eval, exec, open, subprocess
+5. The script receives the document text in variable 'raw_text'
+6. The script must populate a 'result' dict with the extracted fields
+7. Use simple regex patterns: re.search(r'pattern', raw_text)
+8. Return None for fields that cannot be found
+9. Field names should match the target schema exactly
+10. Keep the script simple - no complex logic, no helper functions needed
 
-# Your extraction logic here
-# ...
+Example of valid script (output as raw Python, no imports):
+result = {{}}
+match = re.search(r'INVOICE[:\s]+([A-Z0-9-]+)', raw_text)
+result['invoice_number'] = match.group(1) if match else None
+match = re.search(r'Total[:\s]+\\$?([0-9,]+\\.?[0-9]*)', raw_text)
+result['invoice_total'] = match.group(1) if match else None
 
-result = {{
-    'field_name_1': extracted_value,
-    'field_name_2': extracted_value,
-    'field_name_3': None
-}}
-```
-
-Write only the Python script, no explanation."""
+Output only the Python script, no imports, no explanation, no markdown."""
 
         for attempt in range(1, self.max_retries + 1):
             try:
@@ -89,6 +88,14 @@ Write only the Python script, no explanation."""
                 )
                 
                 script = message.choices[0].message.content.strip()
+                
+                # Clean up markdown from script
+                if "Here's the" in script and "script" in script:
+                    if "```python" in script:
+                        script = script.split("```python")[1].split("```")[0]
+                    elif "```" in script:
+                        script = script.split("```")[1].split("```")[0]
+                
                 if script.startswith("```python"):
                     script = script[9:]
                 if script.startswith("```"):
@@ -96,26 +103,58 @@ Write only the Python script, no explanation."""
                 if script.endswith("```"):
                     script = script[:-3]
                 
+                # Validate it's actual Python before returning
+                try:
+                    import ast
+                    ast.parse(script)
+                    logger.info(f"Script generated and validated ({len(script)} chars)")
+                    return script.strip()
+                except SyntaxError as se:
+                    logger.warning(f"Generated script has syntax error: {se}, attempting cleanup")
+                    # Try to fix common issues
+                    lines = script.split('\n')
+                    cleaned_lines = []
+                    for line in lines:
+                        # Skip lines that look like explanations/text
+                        if line.strip() and not line.strip().startswith('#'):
+                            if 'import ' in line or 'result' in line or 'def ' in line or 're.' in line:
+                                cleaned_lines.append(line)
+                    if cleaned_lines:
+                        script = '\n'.join(cleaned_lines)
+                        logger.info(f"Cleaned script: {script[:200]}...")
+                    else:
+                        logger.error("Could not clean script, will retry")
+                
                 logger.info(f"Script generated ({len(script)} chars)")
                 return script.strip()
-            except RateLimitError as e:
-                logger.warning(f"Rate limit hit on script generation attempt {attempt}")
-                if attempt == self.max_retries:
-                    raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
-            except OpenAITimeout as e:
-                logger.warning(f"Timeout on script generation attempt {attempt}")
-                if attempt == self.max_retries:
-                    raise APITimeoutError("Claude", str(e))
-            except OpenAIAPIError as e:
+            except Exception as e:
+                error_type = type(e).__name__
                 error_str = str(e).lower()
-                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                
+                # Handle specific error types
+                if "rate limit" in error_str or "429" in error_str:
+                    logger.warning(f"Rate limit hit on script generation attempt {attempt}")
+                    if attempt == self.max_retries:
+                        raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
+                elif "timeout" in error_str or "504" in error_str:
+                    logger.warning(f"Timeout on script generation attempt {attempt}")
+                    if attempt == self.max_retries:
+                        raise APITimeoutError("Claude", str(e))
+                elif "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                     logger.error("Insufficient credits for Claude API")
                     raise AnthropicCreditError(str(e))
-                if "authentication" in error_str or "unauthorized" in error_str:
+                elif "authentication" in error_str or "unauthorized" in error_str or "401" in error_str:
                     logger.error("Authentication failed for Claude API")
                     raise APIAuthenticationError("Claude", str(e))
-                logger.error(f"OpenRouter API error: {e}")
-                raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
+                elif "invalid" in error_str and "model" in error_str:
+                    logger.error(f"Invalid model: {e}")
+                    raise APIError(str(e), provider="OpenRouter", error_code="INVALID_MODEL")
+                elif "400" in error_str or "bad request" in error_str:
+                    logger.error(f"Bad request: {e}")
+                    raise APIError(str(e), provider="OpenRouter", error_code="BAD_REQUEST")
+                else:
+                    logger.error(f"OpenRouter API error ({error_type}): {e}")
+                    raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
 
     def revise_script(self, script_body: str, raw_text: str, schema: list, 
                      missing_fields: list, attempt: int) -> str:
@@ -143,9 +182,7 @@ Write only the Python script, no explanation."""
 Guidance for revision (attempt {attempt}): {guidance}
 
 Current script:
-```python
 {script_body}
-```
 
 Document sample:
 {raw_text[:2000]}
@@ -153,14 +190,18 @@ Document sample:
 Target fields:
 {schema_str}
 
-Requirements:
-1. Return ONLY revised Python code
-2. Keep the same structure (result dict with field names)
-3. Adjust regex patterns or string operations to locate missing fields
-4. Return None for fields that truly cannot be found
-5. Use only re, json, datetime libraries
+IMPORTANT: Output ONLY raw Python code. Do NOT wrap code in markdown code blocks. Start directly with Python.
 
-Revised script:"""
+Requirements - STRICTLY FOLLOW:
+1. Use ONLY 're' module for regex - available as 're' in scope
+2. Use ONLY 'json' module - available as 'json' in scope
+3. Use ONLY 'datetime' module - available as 'datetime' in scope
+4. DO NOT use: import, from, __import__, eval, exec, open, subprocess
+5. Keep it simple - use direct regex: re.search(r'pattern', raw_text)
+6. The script must populate a 'result' dict
+7. Return None for fields that cannot be found
+
+Revised script (raw Python, no imports):"""
 
         for attempt_num in range(1, self.max_retries + 1):
             try:
@@ -171,6 +212,14 @@ Revised script:"""
                 )
                 
                 script = message.choices[0].message.content.strip()
+                
+                # Clean up markdown from revised script
+                if "Here's the" in script and "script" in script:
+                    if "```python" in script:
+                        script = script.split("```python")[1].split("```")[0]
+                    elif "```" in script:
+                        script = script.split("```")[1].split("```")[0]
+                
                 if script.startswith("```python"):
                     script = script[9:]
                 if script.startswith("```"):
@@ -180,21 +229,24 @@ Revised script:"""
                 
                 logger.info(f"Script revised ({len(script)} chars)")
                 return script.strip()
-            except RateLimitError as e:
-                logger.warning(f"Rate limit hit on script revision attempt {attempt_num}")
-                if attempt_num == self.max_retries:
-                    raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
-            except OpenAITimeout as e:
-                logger.warning(f"Timeout on script revision attempt {attempt_num}")
-                if attempt_num == self.max_retries:
-                    raise APITimeoutError("Claude", str(e))
-            except OpenAIAPIError as e:
+            except Exception as e:
+                error_type = type(e).__name__
                 error_str = str(e).lower()
-                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                
+                if "rate limit" in error_str or "429" in error_str:
+                    logger.warning(f"Rate limit hit on script revision attempt {attempt_num}")
+                    if attempt_num == self.max_retries:
+                        raise APIError(str(e), provider="OpenRouter", error_code="RATE_LIMIT")
+                elif "timeout" in error_str or "504" in error_str:
+                    logger.warning(f"Timeout on script revision attempt {attempt_num}")
+                    if attempt_num == self.max_retries:
+                        raise APITimeoutError("Claude", str(e))
+                elif "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                     logger.error("Insufficient credits for Claude API")
                     raise AnthropicCreditError(str(e))
-                if "authentication" in error_str or "unauthorized" in error_str:
+                elif "authentication" in error_str or "unauthorized" in error_str or "401" in error_str:
                     logger.error("Authentication failed for Claude API")
                     raise APIAuthenticationError("Claude", str(e))
-                logger.error(f"OpenRouter API error: {e}")
-                raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
+                else:
+                    logger.error(f"OpenRouter API error ({error_type}): {e}")
+                    raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")

@@ -116,32 +116,35 @@ Return valid JSON ONLY (no markdown, no code blocks):
                 logger.info(f"dLLM validation complete, {len(report.get('fields', {}))} fields analyzed")
                 return report
                 
-            except RateLimitError as e:
-                logger.warning(f"Rate limit hit on dLLM check attempt {attempt}")
-                if attempt == self.max_retries:
-                    raise APIError(str(e), provider="Mercury", error_code="RATE_LIMIT")
-            except OpenAITimeout as e:
-                logger.warning(f"Timeout on dLLM check attempt {attempt}")
-                if attempt == self.max_retries:
-                    raise APITimeoutError("Mercury", str(e))
-            except OpenAIAPIError as e:
+            except Exception as e:
+                error_type = type(e).__name__
                 error_str = str(e).lower()
-                if "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
+                
+                if "rate limit" in error_str or "429" in error_str:
+                    logger.warning(f"Rate limit hit on dLLM check attempt {attempt}")
+                    if attempt == self.max_retries:
+                        raise APIError(str(e), provider="Mercury", error_code="RATE_LIMIT")
+                elif "timeout" in error_str or "504" in error_str:
+                    logger.warning(f"Timeout on dLLM check attempt {attempt}")
+                    if attempt == self.max_retries:
+                        raise APITimeoutError("Mercury", str(e))
+                elif "credit" in error_str or "quota" in error_str or "insufficient" in error_str or "billing" in error_str:
                     logger.error("Insufficient credits for Mercury API")
                     raise MercuryCreditError(str(e))
-                if "authentication" in error_str or "unauthorized" in error_str:
+                elif "authentication" in error_str or "unauthorized" in error_str or "401" in error_str:
                     logger.error("Authentication failed for Mercury API")
                     raise APIAuthenticationError("Mercury", str(e))
-                logger.error(f"Mercury API error: {e}")
-                raise APIError(str(e), provider="Mercury", error_code="API_ERROR")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse Mercury response as JSON: {e}")
-                if attempt == self.max_retries:
-                    break
-            except Exception as e:
-                logger.error(f"Unexpected error in dLLM check: {e}")
-                if attempt == self.max_retries:
-                    break
+                elif "invalid" in error_str and "model" in error_str:
+                    logger.error(f"Invalid model: {e}")
+                    raise APIError(str(e), provider="Mercury", error_code="INVALID_MODEL")
+                elif "json" in error_str:
+                    logger.error(f"Failed to parse Mercury response as JSON: {e}")
+                    if attempt == self.max_retries:
+                        break
+                else:
+                    logger.error(f"Unexpected error in dLLM check ({error_type}): {e}")
+                    if attempt == self.max_retries:
+                        break
         
         # Fallback: return a basic report with all fields marked uncertain
         logger.warning("Returning fallback validation report")
