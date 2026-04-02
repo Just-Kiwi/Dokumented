@@ -224,7 +224,7 @@ async def extract(request: ExtractRequest, db: Session = Depends(get_db)):
         result_id = await pipeline.extract(
             request.filename,
             request.raw_text,
-            request.schema or [],
+            request.field_definitions or [],
             events_callback=emit_event
         )
         logger.info(f"Extraction completed successfully, result_id: {result_id}")
@@ -419,7 +419,7 @@ async def start_batch(request: BatchStartRequest, db: Session = Depends(get_db))
         for f in request.files
     ]
     
-    schema_data = [f.model_dump() for f in (request.schema or [])]
+    schema_data = [f.model_dump() for f in (request.field_definitions or [])]
     
     batch = BatchQueue(
         status=BatchStatusEnum.pending,

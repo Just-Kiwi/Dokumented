@@ -41,7 +41,7 @@ class ExtractRequest(BaseModel):
     """Request to extract fields from document."""
     filename: str
     raw_text: str
-    schema: Optional[List[FieldDefinition]] = None
+    field_definitions: Optional[List[FieldDefinition]] = None
 
 
 class FieldStatus(BaseModel):
@@ -65,7 +65,7 @@ class ExtractionReportResponse(BaseModel):
     status: str
     extracted_json: Dict[str, Any]
     missing_fields: List[str]
-    schema: Optional[List[Dict[str, Any]]] = None
+    field_definitions: Optional[List[Dict[str, Any]]] = None
     dllm_report: Optional[Dict[str, Any]] = None
 
     class Config:
@@ -117,7 +117,7 @@ class BatchFileRequest(BaseModel):
 class BatchStartRequest(BaseModel):
     """Request to start batch extraction."""
     files: List[BatchFileRequest]
-    schema: Optional[List[FieldDefinition]] = None
+    field_definitions: Optional[List[FieldDefinition]] = None
 
 
 class BatchFileStatus(BaseModel):

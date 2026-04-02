@@ -104,13 +104,13 @@ class TestExtractRequest:
         request = ExtractRequest(
             filename="invoice.pdf",
             raw_text="Invoice content here",
-            schema=[
+            field_definitions=[
                 {"name": "amount", "description": "Total amount"}
             ]
         )
         assert request.filename == "invoice.pdf"
         assert request.raw_text == "Invoice content here"
-        assert len(request.schema) == 1
+        assert len(request.field_definitions) == 1
 
     def test_extract_request_without_schema(self):
         """Test ExtractRequest without schema (optional)."""
@@ -118,7 +118,7 @@ class TestExtractRequest:
             filename="document.txt",
             raw_text="Some text"
         )
-        assert request.schema is None
+        assert request.field_definitions is None
 
     def test_extract_request_missing_filename(self):
         """Test ExtractRequest requires filename."""
