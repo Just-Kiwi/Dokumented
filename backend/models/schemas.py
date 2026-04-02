@@ -1,7 +1,7 @@
 """
 Pydantic request/response schemas for FastAPI.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -19,8 +19,7 @@ class ConfigResponse(BaseModel):
     value: str
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Schema definition schemas
@@ -68,8 +67,7 @@ class ExtractionReportResponse(BaseModel):
     field_definitions: Optional[List[Dict[str, Any]]] = None
     dllm_report: Optional[Dict[str, Any]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Human override schemas
@@ -139,5 +137,5 @@ class BatchResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
