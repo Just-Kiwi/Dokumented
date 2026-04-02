@@ -30,32 +30,40 @@ function App() {
 
   const loadBatch = useCallback(async (id) => {
     try {
+      console.log('[DEBUG loadBatch] Loading batch:', id)
       const response = await getBatch(id)
       setFiles(response.data.files)
       setBatchStatus(response.data.status)
       setIsProcessing(response.data.status === 'processing')
       
       const processedFiles = response.data.files.filter(f => f.status === 'processed')
+      console.log('[DEBUG loadBatch] Processed files count:', processedFiles.length)
+      
       const newResults = {}
       
       for (let i = 0; i < processedFiles.length; i++) {
         const file = processedFiles[i]
+        console.log('[DEBUG loadBatch] Processing file:', file.filename, 'result_id:', file.result_id)
         if (file.result_id) {
           try {
             const resultRes = await getExtraction(file.result_id)
             newResults[file.filename] = resultRes.data
+            console.log('[DEBUG loadBatch] Result loaded for:', file.filename)
           } catch (e) {
-            console.error('Failed to load result for', file.filename, e)
+            console.error('[DEBUG loadBatch] Failed to load result for', file.filename, e)
           }
         }
       }
       
-      if (Object.keys(newResults).length > 0) {
-        setResults(newResults)
-      }
+      console.log('[DEBUG loadBatch] New results keys:', Object.keys(newResults))
+      setResults(prev => {
+        const merged = {...prev, ...newResults}
+        console.log('[DEBUG loadBatch] Results merged, total keys:', Object.keys(merged).length)
+        return merged
+      })
       
     } catch (e) {
-      console.error('Failed to load batch:', e)
+      console.error('[DEBUG loadBatch] Failed to load batch:', e)
     }
   }, [])
 
@@ -145,14 +153,18 @@ function App() {
 
   const handleStartExtraction = async () => {
     if (!batchId) return
+    console.log('[DEBUG handleStartExtraction] Starting extraction for batch:', batchId)
     setIsProcessing(true)
     setResults({})
     try {
       await processBatch(batchId)
+      console.log('[DEBUG handleStartExtraction] Process batch completed')
       loadBatch(batchId)
     } catch (e) {
       setIsProcessing(false)
+      console.error('[DEBUG handleStartExtraction] Error:', e)
       if (e.response?.status === 400 && e.response?.data?.detail?.includes('already completed')) {
+        console.log('[DEBUG handleStartExtraction] Batch already completed, will use re-extract')
         return
       }
       setError(`Processing failed: ${e.message}`)

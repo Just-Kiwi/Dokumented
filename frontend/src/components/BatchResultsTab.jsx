@@ -39,6 +39,8 @@ export const BatchResultsTab = ({
   const processedFiles = files.filter(f => f.status === 'processed')
   const currentFile = processedFiles[selectedIndex]
   const currentResult = results[currentFile?.filename]
+  
+  console.log('[DEBUG BatchResultsTab] processedFiles:', processedFiles.length, 'selectedIndex:', selectedIndex, 'currentFile:', currentFile?.filename, 'hasResult:', !!currentResult)
 
   const getAllFields = (result) => {
     if (!result) return []
