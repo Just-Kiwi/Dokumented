@@ -41,15 +41,9 @@
 │  └────────┬────────┘                                             │
 │           │ raw_text                                             │
 │           ▼                                                       │
-│  ┌────────────────────────────┐                                  │
-│  │  LLM: Fingerprint Document │                                  │
-│  │  (agents/llm_agent.py)     │                                  │
-│  └────────┬───────────────────┘                                  │
-│           │ fingerprint (e.g., "vendor-invoice-tabular")         │
-│           ▼                                                       │
 │  ┌────────────────────────────────────────────┐                 │
 │  │  Script Lookup / Creation                  │                 │
-│  │  ├─ Query script_library by fingerprint    │                 │
+│  │  ├─ Query script_library                   │                 │
 │  │  └─ If not found: LLM writes new script   │                 │
 │  └────────┬───────────────────────────────────┘                 │
 │           │ script_body                                          │
@@ -61,7 +55,7 @@
 │  │  │    (services/script_runner.py)      │   │                 │
 │  │  │    ↓                                │   │                 │
 │  │  │ 2. dLLM Field Validation            │   │                 │
-│  │  │    (agents/dllm_checker.py)         │   │                 │
+│  │  │    (agents/dllm_checker.py)          │   │                 │
 │  │  │    ├─ Missing fields?               │   │                 │
 │  │  │    └─ Confidence score              │   │                 │
 │  │  │       ├─ High (>0.75) →Human Gate  │   │                 │
@@ -87,7 +81,6 @@
 │           ▼                                                       │
 │  ┌────────────────────────────────────────────┐                 │
 │  │  Send WebSocket Events                     │                 │
-│  │  - fingerprint_assigned                    │                 │
 │  │  - script_found / script_written           │                 │
 │  │  - script_executed                         │                 │
 │  │  - dllm_check_complete                     │                 │
@@ -103,13 +96,14 @@
 │  ┌──────────────────────┐  ┌─────────────────────┐             │
 │  │ script_library       │  │ extraction_results  │             │
 │  │ ─────────────────    │  │ ──────────────────  │             │
-│  │ fingerprint          │  │ filename            │             │
-│  │ script_body          │  │ fingerprint (FK)    │             │
-│  │ version              │  │ raw_text            │             │
-│  │ success_count        │  │ extracted_json      │             │
-│  │ fail_count           │  │ human_overrides     │             │
-│  │ created_at/updated_at│  │ status              │             │
-│  └──────────────────────┘  │ created_at          │             │
+│  │ script_body          │  │ filename            │             │
+│  │ version              │  │ script_id (FK)      │             │
+│  │ success_count        │  │ script_version      │             │
+│  │ fail_count           │  │ raw_text            │             │
+│  │ created_at/updated_at│  │ extracted_json      │             │
+│  └──────────────────────┘  │ human_overrides     │             │
+│                             │ status              │             │
+│                             │ created_at          │             │
 │                             └─────────────────────┘             │
 │  ┌──────────────────────┐  ┌─────────────────────┐             │
 │  │ retry_log            │  │ app_config          │             │
@@ -119,11 +113,10 @@
 │  │ missing_fields       │  │ created_at/updated_at               │
 │  │ dllm_report          │  │                     │             │
 │  │ script_before        │  │ Config keys:        │             │
-│  │ script_after         │  │ - ANTHROPIC_API_KEY│             │
-│  │ outcome              │  │ - MERCURY_API_KEY  │             │
-│  │ created_at           │  │ - MERCURY_BASE_URL │             │
-│  └──────────────────────┘  │ - MAX_RETRIES      │             │
-│                             │ - CONFIDENCE_THRESHOLD            │
+│  │ script_after         │  │ - OPENROUTER_API_KEY│             │
+│  │ outcome              │  │ - OPENROUTER_BASE_URL             │
+│  │ created_at           │  │ - MAX_RETRIES      │             │
+│  └──────────────────────┘  │ - CONFIDENCE_THRESHOLD            │
 │                             └─────────────────────┘             │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -153,17 +146,13 @@
        │
        └─→ PIPELINE.extract():
            │
-           ├─ Step 1: LLM Fingerprint
-           │  └─ Returns: "vendor-invoice-tabular"
-           │  └─ Emit: fingerprint_assigned event
-           │
-           ├─ Step 2: Script Lookup
+           ├─ Step 1: Script Lookup
            │  ├─ Query: SELECT * FROM script_library 
-           │  │          WHERE fingerprint = 'vendor-invoice-tabular'
+           │  │          ORDER BY success_count DESC
            │  ├─ If found: Use existing script (emit: script_found)
            │  └─ If not: LLM writes new script (emit: script_written)
            │
-           ├─ Step 3-8: Execute with Retry Loop
+           ├─ Step 2-7: Execute with Retry Loop
            │  │
            │  └─ For attempt = 1 to 3:
            │     │
@@ -190,9 +179,9 @@
            │        ├─ Log to retry_log table
            │        └─ Continue loop with new script
            │
-           ├─ Step 9: Save Result
+           ├─ Step 8: Save Result
            │  ├─ INSERT INTO extraction_results:
-           │  │  filename, fingerprint, script_version,
+           │  │  filename, script_id, script_version,
            │  │  raw_text, extracted_json, status
            │  │
            │  ├─ If escalation needed:
@@ -249,7 +238,7 @@
 ```
 Attempt 1: Layout Drift
 ├─ Assumption: Document format changed but same type
-├─ Action: LLM adjusts CSS selectors, regex patterns
+├─ Action: LLM adjusts regex patterns
 ├─ Provided: Gap list + document sample
 └─ Goal: Adapt to new layout variations
 
@@ -264,7 +253,7 @@ Attempt 3: New Variant
 ├─ Action: LLM writes completely fresh script
 ├─ Provided: Full document + field schema
 └─ Goal: Treat as new format variant
-└─ Note: Logged as new fingerprint candidate
+└─ Note: Logged as new script version
 
 After Attempt 3: Escalate
 └─ All missing fields sent to human gate

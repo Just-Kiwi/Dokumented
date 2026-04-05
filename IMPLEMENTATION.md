@@ -22,7 +22,7 @@ The entire Dokumented intelligent document extraction system has been implemente
 - Safe extraction of raw text from multiple formats
 
 ✅ **Extraction Pipeline**
-- Full orchestration of fingerprint → script lookup → execution → validation → retry loop
+- Full orchestration of script lookup → execution → validation → retry loop
 - 3-attempt retry system with confidence-based routing
 - WebSocket event broadcasting for live status
 - Human escalation for truly missing fields
@@ -72,7 +72,7 @@ The entire Dokumented intelligent document extraction system has been implemente
 ## 🚀 Key Features Implemented
 
 ### 1. Two-Model Agent Architecture
-- **LLM (Claude Sonnet)**: Handles reasoning, script generation, fingerprinting
+- **LLM (Claude Sonnet)**: Handles reasoning, script generation
 - **dLLM (Mercury 2)**: Fast field validation with confidence scoring
 - Smart resource utilization based on task requirements
 
@@ -285,7 +285,7 @@ Refer to:
 
 ## ✨ Features Checklist
 
-- ✅ LLM fingerprinting and script generation
+- ✅ LLM script generation and revision
 - ✅ dLLM field validation with confidence scoring
 - ✅ 3-attempt retry loop with intelligent escalation
 - ✅ Per-format script library with versioning
