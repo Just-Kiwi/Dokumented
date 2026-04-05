@@ -88,9 +88,11 @@ function App() {
   }, [batchId, isProcessing, loadBatch])
 
   useEffect(() => {
+    let ignore = false
     const loadLastBatch = async () => {
       try {
         const res = await listBatches()
+        if (ignore) return
         if (res.data.length > 0) {
           const lastBatch = res.data[0]
           if (lastBatch.status !== 'completed' && lastBatch.status !== 'cancelled') {
@@ -103,6 +105,7 @@ function App() {
       }
     }
     loadLastBatch()
+    return () => { ignore = true }
   }, [loadBatch])
 
   const toggleTheme = () => {

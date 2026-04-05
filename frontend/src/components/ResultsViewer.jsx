@@ -27,22 +27,24 @@ export const ResultsViewer = ({ result, onOverridesApplied, onError }) => {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    if (result && result.result_id && !result.schema) {
-      setIsLoading(true)
-      getExtraction(result.result_id)
-        .then(res => {
-          setFullResult(res.data)
-        })
-        .catch(err => {
-          console.error('Failed to load full result:', err)
-          setFullResult(result)
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
-    } else if (result) {
-      setFullResult(result)
+    if (!result || !result.result_id || result.schema) {
+      if (result) setFullResult(result)
+      return
     }
+    let ignore = false
+    setIsLoading(true)
+    getExtraction(result.result_id)
+      .then(res => {
+        if (!ignore) setFullResult(res.data)
+      })
+      .catch(err => {
+        console.error('Failed to load full result:', err)
+        if (!ignore) setFullResult(result)
+      })
+      .finally(() => {
+        if (!ignore) setIsLoading(false)
+      })
+    return () => { ignore = true }
   }, [result])
 
   if (!result) {

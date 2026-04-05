@@ -19,13 +19,18 @@ export const AgentMonitor = ({ resultId }) => {
   const { isConnected } = useWebSocket(handleMessage)
 
   useEffect(() => {
-    if (resultId && activeTab === 'validation') {
-      setLoadingLog(true)
-      getValidationLog(resultId)
-        .then(res => setValidationLog(res.data))
-        .catch(err => console.error('Failed to load validation log:', err))
-        .finally(() => setLoadingLog(false))
-    }
+    if (!resultId || activeTab !== 'validation') return
+    let ignore = false
+    setLoadingLog(true)
+    getValidationLog(resultId)
+      .then(res => {
+        if (!ignore) setValidationLog(res.data)
+      })
+      .catch(err => console.error('Failed to load validation log:', err))
+      .finally(() => {
+        if (!ignore) setLoadingLog(false)
+      })
+    return () => { ignore = true }
   }, [resultId, activeTab])
 
   const getEventIcon = (event) => {
