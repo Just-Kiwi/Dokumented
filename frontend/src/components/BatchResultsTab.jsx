@@ -3,10 +3,10 @@ import './BatchResultsTab.css'
 
 const getStatusIcon = (status) => {
   switch (status) {
-    case 'filled': return '\u2705'
-    case 'missing': return '\u274C'
-    case 'uncertain': return '\u26A0\uFE0F'
-    default: return '\u2753'
+    case 'filled': return ''
+    case 'missing': return ''
+    case 'uncertain': return ''
+    default: return ''
   }
 }
 
@@ -75,17 +75,6 @@ export const BatchResultsTab = ({
   return (
     <div className="batch-results-tab">
       <div className="tabs-header">
-        <div className="tabs-list">
-          {processedFiles.map((file, index) => (
-            <button
-              key={index}
-              className={`tab-btn ${selectedIndex === index ? 'active' : ''}`}
-              onClick={() => onSelectTab(index)}
-            >
-              {file.filename}
-            </button>
-          ))}
-        </div>
         <div className="download-actions">
           <button
             className="download-btn"
@@ -102,6 +91,25 @@ export const BatchResultsTab = ({
             Download All
           </button>
         </div>
+      </div>
+
+      <div className="overview-summary">
+        {(() => {
+          const overview = { complete: 0, partial: 0, failed: 0 }
+          processedFiles.forEach(file => {
+            const result = results[file.filename]
+            if (result?.status === 'complete') overview.complete++
+            else if (result?.status === 'partial') overview.partial++
+            else if (result?.status === 'failed') overview.failed++
+          })
+          return (
+            <>
+              <span className="overview-item"><span className="overview-count">{overview.complete}</span> Complete</span>
+              <span className="overview-item"><span className="overview-count">{overview.partial}</span> Partial</span>
+              <span className="overview-item"><span className="overview-count">{overview.failed}</span> Fail</span>
+            </>
+          )
+        })()}
       </div>
 
       <div className="tab-content">

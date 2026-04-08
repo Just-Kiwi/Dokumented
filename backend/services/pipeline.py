@@ -265,7 +265,14 @@ class ExtractionPipeline:
                     break
 
             # Step 8: Save result
-            final_status = StatusEnum.complete if not missing_fields else StatusEnum.partial
+            has_extracted_values = any(v is not None for v in extracted_json.values()) if extracted_json else False
+            
+            if not missing_fields and has_extracted_values:
+                final_status = StatusEnum.complete
+            elif has_extracted_values:
+                final_status = StatusEnum.partial
+            else:
+                final_status = StatusEnum.failed
             
             result = ExtractionResult(
                 filename=filename,
