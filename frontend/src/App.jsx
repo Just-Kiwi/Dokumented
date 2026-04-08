@@ -219,7 +219,7 @@ function App() {
   const handleDownloadSingle = async (index) => {
     const processedFiles = files.filter(f => f.status === 'processed')
     const file = processedFiles[index]
-    if (!file || !file.resultId) return
+    if (!file || !file.result_id) return
     
     try {
       const res = await getExtraction(file.resultId)
@@ -254,7 +254,9 @@ function App() {
   }
 
   const processedFiles = files.filter(f => f.status === 'processed')
-  const selectedResult = processedFiles[selectedIndex] ? results[processedFiles[selectedIndex].filename] : null
+  const selectedFile = files[selectedIndex]
+  const processedIndex = selectedFile ? processedFiles.findIndex(f => f.filename === selectedFile.filename) : 0
+  const selectedResult = processedIndex >= 0 ? results[processedFiles[processedIndex]?.filename] : null
   const isPaused = batchStatus === 'paused'
 
   return (
@@ -314,7 +316,7 @@ function App() {
               <BatchResultsTab
                 files={files}
                 results={results}
-                selectedIndex={selectedIndex}
+                selectedIndex={processedIndex}
                 onSelectTab={setSelectedIndex}
                 onDownloadSingle={handleDownloadSingle}
                 onDownloadAll={handleDownloadAll}

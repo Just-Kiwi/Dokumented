@@ -603,20 +603,31 @@ async def process_batch(batch_id: int, db: Session = Depends(get_db)):
                 events_callback=emit_event
             )
             
-            file_data["status"] = "processed"
-            file_data["result_id"] = result_id
-            file_data["error"] = None
+            files = list(batch.files)  # Create a new copy
+            files[batch.current_index]["status"] = "processed"
+            files[batch.current_index]["result_id"] = result_id
+            files[batch.current_index]["error"] = None
+            batch.files = files
             logger.info(f">> File processed: {file_data['filename']}, result_id={result_id}")
-            stmt = sql_update(BatchQueue).where(BatchQueue.id == batch_id).values(files=batch.files)
-            db.execute(stmt)
+            db.execute(
+                sql_update(BatchQueue)
+                .where(BatchQueue.id == batch_id)
+                .values(files=batch.files)
+            )
             db.commit()
+            db.refresh(batch)
             
         except Exception as e:
             logger.error(f">> File failed: {file_data['filename']}: {e}")
-            file_data["status"] = "cancelled"
-            file_data["error"] = str(e)
-            stmt = sql_update(BatchQueue).where(BatchQueue.id == batch_id).values(files=batch.files)
-            db.execute(stmt)
+            files = list(batch.files)
+            files[batch.current_index]["status"] = "cancelled"
+            files[batch.current_index]["error"] = str(e)
+            batch.files = files
+            db.execute(
+                sql_update(BatchQueue)
+                .where(BatchQueue.id == batch_id)
+                .values(files=batch.files)
+            )
             db.commit()
         
         batch.current_index += 1
@@ -735,20 +746,31 @@ async def process_batch(batch_id: int, db: Session = Depends(get_db)):
                 events_callback=emit_event
             )
             
-            file_data["status"] = "processed"
-            file_data["result_id"] = result_id
-            file_data["error"] = None
+            files = list(batch.files)  # Create a new copy
+            files[batch.current_index]["status"] = "processed"
+            files[batch.current_index]["result_id"] = result_id
+            files[batch.current_index]["error"] = None
+            batch.files = files
             logger.info(f">> File processed: {file_data['filename']}, result_id={result_id}")
-            stmt = sql_update(BatchQueue).where(BatchQueue.id == batch_id).values(files=batch.files)
-            db.execute(stmt)
+            db.execute(
+                sql_update(BatchQueue)
+                .where(BatchQueue.id == batch_id)
+                .values(files=batch.files)
+            )
             db.commit()
+            db.refresh(batch)
             
         except Exception as e:
             logger.error(f">> File failed: {file_data['filename']}: {e}")
-            file_data["status"] = "cancelled"
-            file_data["error"] = str(e)
-            stmt = sql_update(BatchQueue).where(BatchQueue.id == batch_id).values(files=batch.files)
-            db.execute(stmt)
+            files = list(batch.files)
+            files[batch.current_index]["status"] = "cancelled"
+            files[batch.current_index]["error"] = str(e)
+            batch.files = files
+            db.execute(
+                sql_update(BatchQueue)
+                .where(BatchQueue.id == batch_id)
+                .values(files=batch.files)
+            )
             db.commit()
         
         batch.current_index += 1
