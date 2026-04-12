@@ -3,6 +3,7 @@ import UploadPanel from './components/UploadPanel'
 import FileQueuePanel from './components/FileQueuePanel'
 import BatchResultsTab from './components/BatchResultsTab'
 import SchemaConfig from './components/SchemaConfig'
+import ConfigPanel from './components/ConfigPanel'
 import { 
   startBatch, getBatch, listBatches,
   pauseBatch, resumeBatch, cancelBatch, clearBatch, processBatch,
@@ -27,6 +28,7 @@ function App() {
   const [error, setError] = useState('')
   const [results, setResults] = useState({})
   const [theme, setTheme] = useState('day')
+  const [showConfig, setShowConfig] = useState(false)
 
   const loadBatch = useCallback(async (id) => {
     try {
@@ -266,9 +268,12 @@ function App() {
           <h1>Dokument</h1>
           <p>Intelligent Document Extraction System</p>
         </div>
-        <div className="header-actions">
-          <button className="config-btn" onClick={toggleTheme}>
-            {theme === 'day' ? '\u2600' : '\u263D'}
+<div className="header-actions">
+          <button className="config-btn" onClick={() => setShowConfig(true)} title="Configuration">
+            ⚙
+          </button>
+          <button className="config-btn" onClick={toggleTheme} title="Toggle Theme">
+            {theme === 'day' ? '☀' : '☾'}
           </button>
         </div>
       </header>
@@ -330,6 +335,8 @@ function App() {
       <footer className="app-footer">
         <p>Dokument v1.0.0 | Two-Model Agent Architecture | Lucas 2026</p>
       </footer>
+
+      <ConfigPanel isOpen={showConfig} onClose={() => setShowConfig(false)} />
     </div>
   )
 }

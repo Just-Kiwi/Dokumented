@@ -156,6 +156,98 @@ Output only the Python script, no imports, no explanation, no markdown."""
                     logger.error(f"OpenRouter API error ({error_type}): {e}")
                     raise APIError(str(e), provider="OpenRouter", error_code="API_ERROR")
 
+    def _extract_python_code(self, response: str) -> str:
+        """Extract Python code from LLM response, removing conversational prefixes and markdown."""
+        import re
+        
+        # Try to find code block first
+        if "```python" in response:
+            code = response.split("```python")[1].split("```")[0]
+            return self._fix_trailing_colons(code.strip())
+        if "```" in response:
+            # Find first code block
+            parts = response.split("```")
+            if len(parts) >= 3:
+                code = parts[1]
+                # Skip if it looks like language identifier
+                if code.strip().startswith('python'):
+                    code = parts[2] if len(parts) > 2 else ""
+                return self._fix_trailing_colons(code.strip())
+        
+        # No code block - extract based on patterns
+        lines = response.split('\n')
+        code_start = -1
+        
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            
+            # Skip conversational prefixes
+            if stripped.lower().startswith('here is') or stripped.lower().startswith('here\'s'):
+                continue
+            if 'revised script' in stripped.lower() or 'updated script' in stripped.lower():
+                continue
+            if stripped.lower().startswith('result ='):
+                code_start = i
+                break
+            if stripped.lower().startswith('import ') or stripped.lower().startswith('def '):
+                code_start = i
+                break
+            # Match lines that look like Python code (assignments, function calls, etc.)
+            if re.match(r"^\s*[\w\[\]'\"].*[:=]", stripped) and not stripped.startswith('#'):
+                code_start = i
+                break
+        
+        if code_start >= 0:
+            extracted = '\n'.join(lines[code_start:])
+            return self._fix_trailing_colons(extracted)
+        
+        # Fallback - return as-is and let syntax validator handle it
+        return response
+
+    def _fix_trailing_colons(self, code: str) -> str:
+        """Remove trailing colons from non-Python statement lines."""
+        lines = code.split('\n')
+        fixed_lines = []
+        valid_statement_keywords = [
+            'if ', 'elif ', 'else:', 'for ', 'while ', 'def ', 'class ',
+            'try:', 'except', 'finally:', 'with ', 'async ', 'match ', 'case '
+        ]
+        
+        for line in lines:
+            stripped = line.rstrip()
+            # If line ends with colon, check if it's a valid statement
+            if stripped.endswith(':'):
+                # Check if it's a valid Python statement that needs colon
+                is_valid = any(stripped.startswith(kw) for kw in valid_statement_keywords)
+                # Also check for lambda, which can end with :
+                if 'lambda' in stripped:
+                    is_valid = True
+                    
+                if not is_valid:
+                    stripped = stripped[:-1]  # Remove trailing colon
+            fixed_lines.append(stripped)
+        
+        return '\n'.join(fixed_lines)
+
+    def _filter_dangerous_patterns(self, script: str) -> str:
+        """Remove or replace dangerous patterns in generated scripts."""
+        dangerous_patterns = [
+            ('__import__', '# __import__ removed - use re module instead'),
+            ('import os', '# import os removed'),
+            ('import sys', '# import sys removed'),
+            ('exec(', '# exec( removed'),
+            ('eval(', '# eval( removed'),
+            ('open(', '# open( removed - use re.search for text extraction'),
+            ('subprocess', '# subprocess removed'),
+            ('socket', '# socket removed'),
+        ]
+        
+        for pattern, replacement in dangerous_patterns:
+            if pattern in script:
+                script = script.replace(pattern, replacement)
+        
+        return script
+
     def revise_script(self, script_body: str, raw_text: str, schema: list, 
                      missing_fields: list, attempt: int) -> str:
         """
@@ -213,19 +305,12 @@ Revised script (raw Python, no imports):"""
                 
                 script = message.choices[0].message.content.strip()
                 
-                # Clean up markdown from revised script
-                if "Here's the" in script and "script" in script:
-                    if "```python" in script:
-                        script = script.split("```python")[1].split("```")[0]
-                    elif "```" in script:
-                        script = script.split("```")[1].split("```")[0]
+                # Clean up markdown and conversational prefixes from revised script
+                # Extract only the Python code portion
+                script = self._extract_python_code(script)
                 
-                if script.startswith("```python"):
-                    script = script[9:]
-                if script.startswith("```"):
-                    script = script[3:]
-                if script.endswith("```"):
-                    script = script[:-3]
+                # Filter out dangerous patterns that would be blocked by ScriptRunner
+                script = self._filter_dangerous_patterns(script)
                 
                 logger.info(f"Script revised ({len(script)} chars)")
                 return script.strip()

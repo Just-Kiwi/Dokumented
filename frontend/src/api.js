@@ -58,6 +58,7 @@ export const downloadSingleResult = (resultId) => api.get(`/extraction/${resultI
 
 export const listScripts = () => api.get('/scripts')
 export const getScript = (scriptId) => api.get(`/scripts/${scriptId}`)
+export const deleteAllScripts = () => api.delete('/scripts')
 
 // WebSocket
 export const connectWebSocket = (onMessage, onError, onClose) => {

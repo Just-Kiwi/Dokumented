@@ -75,6 +75,114 @@ class ExtractionPipeline:
         
         fixed = script_body
         
+        # Fix conversational prefix that isn't valid Python
+        # e.g., "Here is the revised extraction script:" -> skip it
+        lines = fixed.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            stripped = line.strip().lower()
+            if stripped.startswith('here is') or stripped.startswith('here\'s'):
+                continue
+            if 'revised script' in stripped or 'updated script' in stripped:
+                continue
+            cleaned_lines.append(line)
+        fixed = '\n'.join(cleaned_lines)
+        
+        # If nothing left after cleaning, return original
+        if not fixed.strip():
+            return script_body
+        
+        # Fix 1: Remove lines ending with ellipsis (incomplete truncated statements)
+        # e.g., "if match..." or "result['field'] = value..."
+        lines = fixed.split('\n')
+        fixed_lines = []
+        for line in lines:
+            stripped = line.rstrip()
+            # Skip empty lines
+            if not stripped:
+                fixed_lines.append(stripped)
+                continue
+            # Remove trailing ellipsis from any line (indicates truncated/incomplete)
+            if stripped.endswith('...'):
+                stripped = stripped[:-3].rstrip()
+                # If nothing left after removing ellipsis, skip the line
+                if not stripped:
+                    continue
+            fixed_lines.append(stripped)
+        fixed = '\n'.join(fixed_lines)
+        
+        # Fix 2: Detect and handle incomplete if/for/while statements
+        # These are statements with condition but no body (no colon or no code after colon)
+        lines = fixed.split('\n')
+        fixed_lines = []
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            # Skip empty lines and comments
+            if not stripped or stripped.startswith('#'):
+                fixed_lines.append(stripped)
+                continue
+            
+            # Detect incomplete if/for/while statements (condition only, no colon or body)
+            # Pattern: "if variable" or "if variable and something" with no colon
+            if re.match(r'^\s*(if|elif|for|while)\s+[\w\s\'\"]+\s*$', stripped):
+                # This is an incomplete statement - convert to comment
+                stripped = '# Incomplete statement removed: ' + stripped
+            # Detect if statements that end with just a colon but next line is empty/invalid
+            # This is handled by the trailing colon fix below
+            
+            fixed_lines.append(stripped)
+        fixed = '\n'.join(fixed_lines)
+        
+        # Fix 3: Remove remaining incomplete multi-line statements
+        # Look for patterns like "if condition:" followed by only comments or empty lines
+        lines = fixed.split('\n')
+        fixed_lines = []
+        in_incomplete_block = False
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            
+            # Check if this is an if statement ending with colon (potential block start)
+            if re.match(r'^\s*(if|elif|for|while)\s+.*:\s*$', stripped):
+                # Look ahead - if next non-empty line is not indented, this block is incomplete
+                has_valid_body = False
+                for j in range(i + 1, len(lines)):
+                    next_line = lines[j].rstrip()
+                    if next_line:
+                        # Check if it's indented (valid body) or comment
+                        if next_line.startswith(' ') or next_line.startswith('\t') or next_line.startswith('#'):
+                            has_valid_body = True
+                            break
+                        else:
+                            # No valid body found - mark the if as incomplete
+                            break
+                
+                if not has_valid_body:
+                    # Replace the incomplete if with a comment
+                    stripped = '# Incomplete block removed: ' + stripped
+                    in_incomplete_block = False
+            
+            fixed_lines.append(stripped)
+        fixed = '\n'.join(fixed_lines)
+        
+        # Fix trailing colons on non-Python statement lines
+        # e.g., "result['field'] = value:" should be "result['field'] = value"
+        valid_statement_keywords = [
+            'if ', 'elif ', 'else:', 'for ', 'while ', 'def ', 'class ',
+            'try:', 'except', 'finally:', 'with ', 'async ', 'match ', 'case ', 'import ', 'from '
+        ]
+        lines = fixed.split('\n')
+        fixed_lines = []
+        for line in lines:
+            stripped = line.rstrip()
+            if stripped.endswith(':'):
+                is_valid = any(stripped.startswith(kw) for kw in valid_statement_keywords)
+                if 'lambda' in stripped:
+                    is_valid = True
+                if not is_valid:
+                    stripped = stripped[:-1]
+            fixed_lines.append(stripped)
+        fixed = '\n'.join(fixed_lines)
+        
         # Fix unterminated strings - add closing quote
         if "unterminated string literal" in str(error):
             lines = fixed.split('\n')
@@ -84,11 +192,12 @@ class ExtractionPipeline:
                     lines[i] = line + "'"
             fixed = '\n'.join(lines)
         
-        # Fix missing colons after if/for/while/def
+        # Fix missing colons after if/for/while/def (only at start of line)
         for keyword in ['if ', 'for ', 'while ', 'def ']:
-            pattern = keyword + r'([^\n:]+)\n'
-            replacement = keyword + r'\1:\n'
-            fixed = re.sub(pattern, replacement, fixed)
+            # Match keyword at START of line, followed by non-colon chars, ending with newline
+            pattern = r'^' + keyword + r'([^\n:]+)\n'
+            replacement = r'\1:\n'
+            fixed = re.sub(pattern, replacement, fixed, flags=re.MULTILINE)
         
         # Fix missing closing brackets
         open_parens = fixed.count('(') - fixed.count(')')
@@ -172,20 +281,27 @@ class ExtractionPipeline:
                         emit("error", {"step": "script_validation", "attempt": attempt, "error": str(se2)})
                         continue
                 
-                # Execute script
-                try:
-                    extracted_json = self.script_runner.run(script.script_body, raw_text)
-                    fields_found = len([f for f in extracted_json.values() if f is not None])
-                    emit("script_executed", {
-                        "attempt": attempt,
-                        "fields_found": fields_found,
-                        "fields_total": len(schema)
-                    })
-                    logger.info(f"Script executed, found {fields_found}/{len(schema)} fields")
-                except Exception as e:
-                    logger.error(f"Script execution failed: {e}")
+                # Execute script (validate first)
+                is_valid, error_msg = ScriptRunner.validate_script(script.script_body)
+                if not is_valid:
+                    logger.warning(f"Script validation failed: {error_msg}. Skipping execution and retrying.")
                     extracted_json = {}
-                    emit("error", {"step": "script_execution", "attempt": attempt, "error": str(e)})
+                    fields_found = 0
+                    emit("error", {"step": "script_validation", "attempt": attempt, "error": error_msg})
+                else:
+                    try:
+                        extracted_json = self.script_runner.run(script.script_body, raw_text)
+                        fields_found = len([f for f in extracted_json.values() if f is not None])
+                        emit("script_executed", {
+                            "attempt": attempt,
+                            "fields_found": fields_found,
+                            "fields_total": len(schema)
+                        })
+                        logger.info(f"Script executed, found {fields_found}/{len(schema)} fields")
+                    except Exception as e:
+                        logger.error(f"Script execution failed: {e}")
+                        extracted_json = {}
+                        emit("error", {"step": "script_execution", "attempt": attempt, "error": str(e)})
 
                 # dLLM validation
                 try:
@@ -214,15 +330,27 @@ class ExtractionPipeline:
                                 missing_low_confidence.append(field_name)
 
                 # Decide next action
-                if not missing_high_confidence and not missing_low_confidence:
+                missing_fields = missing_high_confidence + missing_low_confidence
+                
+                # Cross-check: if 0 fields found but dLLM says all resolved, treat as missing
+                # This handles cases where dLLM hallucinated "filled" when script actually failed
+                if fields_found == 0 and not missing_fields:
+                    logger.warning("dLLM reported success but 0 fields extracted - treating all fields as missing")
+                    missing_fields = [f['name'] for f in schema]
+                    missing_high_confidence = missing_fields
+                    missing_low_confidence = []
+                
+                if not missing_fields:
                     logger.info("All fields resolved successfully")
                     break
-                elif missing_low_confidence and attempt < self.max_retries:
-                    logger.info(f"Retrying with missing fields: {missing_low_confidence}")
+                
+                # Always retry on attempts 1-2 regardless of confidence level
+                if attempt < self.max_retries:
+                    logger.info(f"Retrying with missing fields: {missing_fields}")
                     emit("retry", {
                         "attempt": attempt,
                         "reason": "script_failure",
-                        "fields": missing_low_confidence
+                        "fields": missing_fields
                     })
                     
                     try:
@@ -231,7 +359,7 @@ class ExtractionPipeline:
                             script.script_body,
                             raw_text,
                             schema,
-                            missing_low_confidence,
+                            missing_fields,
                             attempt
                         )
                         
@@ -247,21 +375,9 @@ class ExtractionPipeline:
                         logger.error(f"Script revision failed: {e}")
                         emit("error", {"step": "script_revision", "error": str(e)})
                 else:
-                    missing_fields = missing_high_confidence + missing_low_confidence
-                    
-                    # If this was the last attempt and we still have missing fields, generate new script
-                    if attempt == self.max_retries and missing_fields:
-                        logger.warning(f"All {self.max_retries} attempts failed. Generating new script...")
-                        emit("retry_exhausted", {"attempts": self.max_retries, "fields": missing_fields})
-                        
-                        script = self.create_new_script(raw_text, schema)
-                        logger.info(f"Generated new script v{script.version} to replace failed one")
-                        
-                        # Reset for next extraction cycle - this will be saved as failed result
-                        # The new script will be tried next time a similar document comes in
-                        break
-                    
-                    logger.warning(f"Escalating {len(missing_fields)} fields to human")
+                    # Last attempt exhausted - escalate to human
+                    logger.warning(f"All {self.max_retries} attempts failed. Escalating {len(missing_fields)} fields to human")
+                    emit("retry_exhausted", {"attempts": self.max_retries, "fields": missing_fields})
                     break
 
             # Step 8: Save result

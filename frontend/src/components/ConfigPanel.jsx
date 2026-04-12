@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import './ConfigPanel.css'
-import { listConfig } from '../api'
+import { listConfig, deleteAllScripts } from '../api'
 
 export const ConfigPanel = ({ isOpen, onClose }) => {
   const [config, setConfig] = useState({})
@@ -55,6 +55,25 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
 
   const handleRefresh = async () => {
     await loadConfig()
+  }
+
+  const handleClearScripts = async () => {
+    const confirmed = window.confirm(
+      'Clear all scripts? This will force a fresh script to be generated for the next extraction. This cannot be undone.'
+    )
+    if (!confirmed) return
+    
+    setIsLoading(true)
+    setMessage('')
+    
+    try {
+      await deleteAllScripts()
+      setMessage('Scripts cleared successfully. A fresh script will be generated on next extraction.')
+    } catch (error) {
+      setMessage(`Error clearing scripts: ${error.message}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   if (!isOpen) return null
@@ -150,6 +169,18 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
               disabled={isLoading}
             >
               Done
+            </button>
+          </div>
+
+          <div className="config-section danger-section">
+            <label>Script Management</label>
+            <p className="hint">If extraction fails repeatedly, you may need to clear corrupted scripts.</p>
+            <button
+              onClick={handleClearScripts}
+              className="danger-btn"
+              disabled={isLoading}
+            >
+              Clear All Scripts
             </button>
           </div>
 
