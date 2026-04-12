@@ -59,6 +59,12 @@ class ExtractionPipeline:
         logger.info(f"[DEBUG create_new_script] schema={schema}")
         script_body = self.llm_agent.write_script(raw_text, schema)
         logger.info(f"[DEBUG create_new_script] Generated script body: {script_body[:200]}...")
+        
+        # Sanitize the generated script to remove any dangerous patterns
+        logger.info(f"[Pipeline] Before sanitization: {script_body[:200]}...")
+        script_body = self._sanitize_script(script_body)
+        logger.info(f"[Pipeline] After sanitization: {script_body[:200]}...")
+        
         script = ScriptLibrary(
             script_body=script_body,
             version=1
@@ -210,7 +216,71 @@ class ExtractionPipeline:
         
         logger.info(f"Attempted to fix script syntax, result: {fixed[:200]}...")
         return fixed
-
+    
+    def _sanitize_script(self, script_body: str) -> str:
+        """
+        Sanitize a script by removing dangerous patterns.
+        This ensures old scripts in the database are safe to execute.
+        """
+        import re
+        
+        lines = script_body.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Remove entire lines containing dangerous patterns
+            # Include all dangerous patterns similar to _filter_dangerous_patterns
+            if any(pattern in stripped for pattern in [
+                '__import__', '__import', 'import os', 'import sys', 'import subprocess',
+                'import socket', 'exec(', 'eval(', 'open(', 'subprocess', 'socket',
+                'getattr(', 'setattr(', 'lambda ', '__builtins__', 'compile(',
+                'input(', 'print('
+            ]):
+                logger.warning(f"[Pipeline] Sanitize removing line with dangerous pattern: {line[:80]}...")
+                continue
+            
+            # Remove 'from X import Y' lines entirely
+            if stripped.startswith('from ') and ('import ' in stripped):
+                logger.warning(f"[Pipeline] Sanitize removing 'from import' line: {line[:80]}...")
+                continue
+            
+            # Additional check: filter lines with eval that might contain dangerous strings
+            if 'eval(' in stripped and any(danger in stripped for danger in ['import', '__', 'os.', 'sys.', 'subprocess']):
+                logger.warning(f"[Pipeline] Sanitize removing eval line with dangerous content: {line[:80]}...")
+                continue
+            
+            # Check for result = eval patterns
+            if re.search(r'result\s*=\s*eval\s*\(', stripped, re.IGNORECASE):
+                logger.warning(f"[Pipeline] Sanitize removing result=eval pattern: {line[:80]}...")
+                continue
+            
+            # Check for getattr/setattr patterns
+            if re.search(r'getattr\(|setattr\(', stripped):
+                logger.warning(f"[Pipeline] Sanitize removing getattr/setattr line: {line[:80]}...")
+                continue
+            
+            # Check for lambda expressions
+            if re.search(r'=\s*lambda\s', stripped):
+                logger.warning(f"[Pipeline] Sanitize removing lambda expression: {line[:80]}...")
+                continue
+            
+            # Remove lines with 'return' statements (not allowed at top level of script)
+            if stripped.startswith('return '):
+                logger.warning(f"[Pipeline] Sanitize removing return statement (invalid at top level): {line[:80]}...")
+                continue
+            
+            cleaned_lines.append(line)
+        
+        script = '\n'.join(cleaned_lines)
+        
+        # Fix incorrect datetime usage
+        if 'datetime.datetime' in script:
+            script = script.replace('datetime.datetime', 'datetime')
+        
+        return script
+    
     async def extract(self, filename: str, raw_text: str, schema: List[Dict],
                      events_callback=None) -> int:
         """
@@ -253,6 +323,13 @@ class ExtractionPipeline:
             script = self.get_best_script()
             
             if script:
+                # Sanitize old scripts to remove any dangerous patterns
+                logger.info(f"[Pipeline] Existing script before sanitize: {script.script_body[:200]}...")
+                sanitized_body = self._sanitize_script(script.script_body)
+                logger.info(f"[Pipeline] Existing script after sanitize: {sanitized_body[:200]}...")
+                if sanitized_body != script.script_body:
+                    logger.warning(f"Script v{script.version} contained dangerous patterns, sanitized before execution")
+                    script.script_body = sanitized_body
                 emit("script_found", {"version": script.version})
                 logger.info(f"Found existing script v{script.version} (success_count={script.success_count})")
             else:
@@ -355,6 +432,7 @@ class ExtractionPipeline:
                     
                     try:
                         script_before = script.script_body
+                        logger.info(f"[Pipeline] Before revision: {script_before[:200]}...")
                         script_after = self.llm_agent.revise_script(
                             script.script_body,
                             raw_text,
@@ -362,8 +440,13 @@ class ExtractionPipeline:
                             missing_fields,
                             attempt
                         )
+                        logger.info(f"[Pipeline] After revision: {script_after[:200]}...")
                         
                         script.script_body = script_after
+                        # Sanitize revised script to catch any dangerous patterns LLM might have added
+                        logger.info(f"[Pipeline] Before sanitize: {script.script_body[:200]}...")
+                        script.script_body = self._sanitize_script(script.script_body)
+                        logger.info(f"[Pipeline] After sanitize: {script.script_body[:200]}...")
                         script.version += 1
                         script.updated_at = datetime.utcnow()
                         self.db.commit()

@@ -47,34 +47,47 @@ class LLMAgent:
             return d.get('name'), d.get('description', 'N/A')
         
         schema_str = "\n".join([f"  - {name}: {desc}" for f in schema for name, desc in [get_field_info(f)]])
+        
+        # Escape raw_text to prevent escape sequence issues in prompt
+        raw_text_escaped = raw_text[:3000].replace('\\', '\\\\')
 
-        prompt = f"""Write a Python script to extract the following fields from the document.
+        prompt = """Write a Python script to extract the following fields from the document.
 
 Target fields to extract:
-{schema_str}
+""" + schema_str + """
 
 Document text to extract from:
-{raw_text[:3000]}
+""" + raw_text_escaped + """
 
 IMPORTANT: Output ONLY raw Python code. Do NOT wrap your code in markdown code blocks (no ```python or ```). Start directly with the Python code.
 
-Requirements - STRICTLY FOLLOW:
+CRITICAL REQUIREMENTS - STRICTLY FOLLOW:
 1. Use ONLY 're' module for regex - available as 're' in scope
 2. Use ONLY 'json' module for JSON parsing - available as 'json' in scope  
 3. Use ONLY 'datetime' module - available as 'datetime' in scope
-4. DO NOT use: import, from, __import__, eval, exec, open, subprocess
-5. The script receives the document text in variable 'raw_text'
-6. The script must populate a 'result' dict with the extracted fields
-7. Use simple regex patterns: re.search(r'pattern', raw_text)
-8. Return None for fields that cannot be found
-9. Field names should match the target schema exactly
-10. Keep the script simple - no complex logic, no helper functions needed
+4. NEVER use: import, from, __import__, eval, exec, open, subprocess, getattr, setattr, lambda
+5. If you CANNOT extract a field, set it to None - DO NOT try to import modules or use complex functions
+6. The script receives the document text in variable 'raw_text'
+7. The script must populate a 'result' dict with the extracted fields
+8. Use simple regex patterns: re.search(r'pattern', raw_text)
+9. Return None for fields that cannot be found - never try to import or load modules
 
-Example of valid script (output as raw Python, no imports):
+BAD examples (DO NOT generate - will cause errors):
+  - from datetime import datetime
+  - import re
+  - __import__('json')
+  - datetime.datetime.now()
+  - eval('...')
+  - exec('...')
+  - result['x'] = getattr(obj, 'method')
+  - result['x'] = lambda x: x+1
+  - return result['field']  # return not allowed at top level
+
+GOOD example (output as raw Python, no imports):
 result = {{}}
-match = re.search(r'INVOICE[:\s]+([A-Z0-9-]+)', raw_text)
+match = re.search(r'INVOICE[:\\s]+([A-Z0-9-]+)', raw_text)
 result['invoice_number'] = match.group(1) if match else None
-match = re.search(r'Total[:\s]+\\$?([0-9,]+\\.?[0-9]*)', raw_text)
+match = re.search(r'Total[:\\s]+\\$?([0-9,]+\\.?[0-9]*)', raw_text)
 result['invoice_total'] = match.group(1) if match else None
 
 Output only the Python script, no imports, no explanation, no markdown."""
@@ -102,6 +115,13 @@ Output only the Python script, no imports, no explanation, no markdown."""
                     script = script[3:]
                 if script.endswith("```"):
                     script = script[:-3]
+                
+                logger.info(f"[LLMAgent] Generated script: {script[:300]}...")
+                
+                # Filter dangerous patterns before validation
+                script = self._filter_dangerous_patterns(script)
+                
+                logger.info(f"[LLMAgent] Script after filtering: {script[:300]}...")
                 
                 # Validate it's actual Python before returning
                 try:
@@ -231,20 +251,69 @@ Output only the Python script, no imports, no explanation, no markdown."""
 
     def _filter_dangerous_patterns(self, script: str) -> str:
         """Remove or replace dangerous patterns in generated scripts."""
-        dangerous_patterns = [
-            ('__import__', '# __import__ removed - use re module instead'),
-            ('import os', '# import os removed'),
-            ('import sys', '# import sys removed'),
-            ('exec(', '# exec( removed'),
-            ('eval(', '# eval( removed'),
-            ('open(', '# open( removed - use re.search for text extraction'),
-            ('subprocess', '# subprocess removed'),
-            ('socket', '# socket removed'),
-        ]
+        import re
         
-        for pattern, replacement in dangerous_patterns:
-            if pattern in script:
-                script = script.replace(pattern, replacement)
+        lines = script.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Remove entire lines containing dangerous patterns
+            # Include __import (without trailing underscores) to catch all variations
+            # Also include getattr, setattr, lambda, and other dangerous patterns
+            if any(pattern in stripped for pattern in [
+                '__import__', '__import', 'import os', 'import sys', 'import subprocess',
+                'import socket', 'exec(', 'eval(', 'open(', 'subprocess', 'socket',
+                'getattr(', 'setattr(', 'lambda ', '__builtins__', 'compile(',
+                'input(', 'print('  # input/print can be used for debug but not needed in extraction
+            ]):
+                logger.warning(f"[LLMAgent] Filter removing line with dangerous pattern: {line[:80]}...")
+                continue
+            
+            # Remove 'from X import Y' lines entirely
+            # Use line.strip() to avoid false positives from variables containing "import"
+            if line.strip().startswith('from ') and ('import ' in line.strip()):
+                logger.warning(f"[LLMAgent] Filter removing 'from import' line: {line[:80]}...")
+                continue
+            
+            # Additional check: filter lines with eval that might contain dangerous strings
+            if 'eval(' in stripped and any(danger in stripped for danger in ['import', '__', 'os.', 'sys.', 'subprocess']):
+                logger.warning(f"[LLMAgent] Filter removing eval line with dangerous content: {line[:80]}...")
+                continue
+            
+            # Check for result = eval patterns
+            if re.search(r'result\s*=\s*eval\s*\(', stripped, re.IGNORECASE):
+                logger.warning(f"[LLMAgent] Filter removing result=eval pattern: {line[:80]}...")
+                continue
+            
+            # Check for getattr/setattr patterns
+            if re.search(r'getattr\(|setattr\(', stripped):
+                logger.warning(f"[LLMAgent] Filter removing getattr/setattr line: {line[:80]}...")
+                continue
+            
+            # Check for lambda expressions (these can be used to bypass restrictions)
+            if re.search(r'=\s*lambda\s', stripped):
+                logger.warning(f"[LLMAgent] Filter removing lambda expression: {line[:80]}...")
+                continue
+            
+            # Remove lines with 'return' statements (not allowed at top level of script)
+            if stripped.startswith('return '):
+                logger.warning(f"[LLMAgent] Filter removing return statement (invalid at top level): {line[:80]}...")
+                continue
+            
+            # Replace dangerous patterns that might be mid-line (less common)
+            line = line.replace('__import__', '# removed')
+            line = line.replace('__import', '# removed')
+            
+            cleaned_lines.append(line)
+        
+        script = '\n'.join(cleaned_lines)
+        
+        # Fix incorrect datetime usage - datetime.datetime should be just datetime
+        if 'datetime.datetime' in script:
+            logger.warning(f"[LLMAgent] Fixing datetime.datetime -> datetime")
+            script = script.replace('datetime.datetime', 'datetime')
         
         return script
 
@@ -273,7 +342,7 @@ Output only the Python script, no imports, no explanation, no markdown."""
 
 Guidance for revision (attempt {attempt}): {guidance}
 
-Current script:
+Current script (KEEP WORKING PARTS - only fix the missing fields):
 {script_body}
 
 Document sample:
@@ -284,14 +353,28 @@ Target fields:
 
 IMPORTANT: Output ONLY raw Python code. Do NOT wrap code in markdown code blocks. Start directly with Python.
 
-Requirements - STRICTLY FOLLOW:
+CRITICAL REQUIREMENTS - STRICTLY FOLLOW:
 1. Use ONLY 're' module for regex - available as 're' in scope
 2. Use ONLY 'json' module - available as 'json' in scope
 3. Use ONLY 'datetime' module - available as 'datetime' in scope
-4. DO NOT use: import, from, __import__, eval, exec, open, subprocess
-5. Keep it simple - use direct regex: re.search(r'pattern', raw_text)
-6. The script must populate a 'result' dict
-7. Return None for fields that cannot be found
+4. NEVER use: import, from, __import__, eval, exec, open, subprocess, getattr, setattr, lambda
+5. If you CANNOT extract a field, set it to None - DO NOT try to import modules
+6. Keep it simple - use direct regex: re.search(r'pattern', raw_text)
+7. The script must populate a 'result' dict
+8. Return None for fields that cannot be found - never try to import or load modules
+9. IMPORTANT: datetime is a MODULE, not a class. Use datetime.strptime() NOT datetime.datetime.strptime()
+
+BAD examples (DO NOT generate - will cause errors):
+  - from datetime import datetime
+  - import re
+  - __import__('json')
+  - eval('...')
+  - exec('...')
+  - result['x'] = getattr(obj, 'method')
+  - result['x'] = lambda x: x+1
+  - return result['field']  # return not allowed at top level
+
+NOTE: The current script may already work for some fields. Only modify what's needed to fix the missing fields.
 
 Revised script (raw Python, no imports):"""
 
@@ -309,10 +392,12 @@ Revised script (raw Python, no imports):"""
                 # Extract only the Python code portion
                 script = self._extract_python_code(script)
                 
+                logger.info(f"[LLMAgent] Revised script: {script[:300]}...")
+                
                 # Filter out dangerous patterns that would be blocked by ScriptRunner
                 script = self._filter_dangerous_patterns(script)
                 
-                logger.info(f"Script revised ({len(script)} chars)")
+                logger.info(f"[LLMAgent] Revised after filter: {script[:300]}...")
                 return script.strip()
             except Exception as e:
                 error_type = type(e).__name__

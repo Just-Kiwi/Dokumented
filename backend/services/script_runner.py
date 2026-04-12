@@ -3,8 +3,12 @@ Safe execution of LLM-generated extraction scripts.
 """
 import re
 import json
+import traceback
 from datetime import datetime, date
 from typing import Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ScriptRunner:
@@ -32,10 +36,48 @@ class ScriptRunner:
         import json
         from datetime import datetime, date
 
+        logger.info(f"[ScriptRunner] Original script ({len(script_body)} chars): {script_body[:500]}...")
+        
         lines = script_body.split('\n')
-        cleaned_lines = [line for line in lines if not line.strip().startswith('import ') and not line.strip().startswith('from ')]
+        cleaned_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Strip any lines starting with 'import' or 'from'
+            # Use stripped for startswith to avoid false positives from "result" containing "import"
+            if stripped.startswith('import ') or stripped.startswith('from '):
+                continue
+            # Also filter lines containing dangerous patterns
+            # Use line (not stripped) to avoid false positives from variables like "result"
+            # Also filter variations of __import__ (without trailing underscores)
+            # Also filter eval() which could contain __import__ in a string
+            # Also filter getattr, setattr, lambda, print, input
+            if any(pattern in line for pattern in [
+                '__import__', '__import', 'exec(', 'eval(',
+                'getattr(', 'setattr(', 'lambda ', 'print(', 'input(',
+                '__builtins__', 'compile('
+            ]):
+                logger.warning(f"[ScriptRunner] Removing line with dangerous pattern: {line[:80]}...")
+                continue
+            # Additional check: filter lines with eval that might contain dangerous strings
+            if 'eval(' in stripped and any(danger in stripped for danger in ['import', '__', 'os.', 'sys.', 'subprocess', 'getattr', 'setattr']):
+                logger.warning(f"[ScriptRunner] Removing line with eval containing dangerous content: {line[:80]}...")
+                continue
+            
+            # Remove lines with 'return' statements (not allowed at top level of script)
+            if stripped.startswith('return '):
+                logger.warning(f"[ScriptRunner] Removing return statement (invalid at top level): {line[:80]}...")
+                continue
+            
+            cleaned_lines.append(line)
         cleaned_script = '\n'.join(cleaned_lines)
-
+        
+        # Debug: log cleaned script
+        logger.info(f"[ScriptRunner] Cleaned script ({len(cleaned_script)} chars): {cleaned_script[:300]}...")
+        
+        if not cleaned_script.strip():
+            logger.error("[ScriptRunner] Script became empty after cleaning")
+            return {}
+        
         safe_builtins = {
             'len': len,
             'str': str,
@@ -74,6 +116,7 @@ class ScriptRunner:
         }
 
         try:
+            logger.info(f"[ScriptRunner] About to execute script ({len(cleaned_script)} chars): {cleaned_script[:300]}...")
             exec(cleaned_script, {"__builtins__": safe_builtins}, local_scope)
             result = local_scope.get('result', {})
             
@@ -81,8 +124,51 @@ class ScriptRunner:
                 result = {}
             
             return result
+        except SyntaxError as se:
+            logger.error(f"Script syntax error: {se}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return {}
+        except NameError as ne:
+            # Check if it's a dangerous NameError (trying to use blocked built-ins)
+            error_str = str(ne)
+            error_lower = error_str.lower()
+            blocked_found = None
+            for blocked in ['__import__', '__import', 'exec', 'eval', 'open', 'subprocess', 'socket', 'getattr', 'setattr', 'lambda', 'print', 'input']:
+                if blocked in error_lower:
+                    blocked_found = blocked
+                    break
+            if blocked_found:
+                logger.error(f"Script blocked dangerous function '{blocked_found}': {ne}")
+            else:
+                logger.error(f"Script NameError (undefined variable): {ne}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return {}
+        except AttributeError as ae:
+            # Handle AttributeError when script tries to access non-existent attributes like __import__
+            error_str = str(ae).lower()
+            blocked_found = None
+            for blocked in ['__import__', '__import', 'import', 'exec', 'eval', 'getattr', 'setattr']:
+                if blocked in error_str:
+                    blocked_found = blocked
+                    break
+            if blocked_found:
+                logger.error(f"Script blocked dangerous attribute '{blocked_found}': {ae}")
+            else:
+                logger.error(f"Script AttributeError: {ae}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return {}
+        except KeyError as ke:
+            # Handle KeyError - can occur when accessing restricted builtins or dictionary keys
+            error_str = str(ke)
+            if '__import__' in error_str:
+                logger.error(f"Script blocked dangerous key access: {ke}")
+            else:
+                logger.error(f"Script KeyError: {ke}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            return {}
         except Exception as e:
-            print(f"Script execution error: {e}")
+            logger.error(f"Script execution error ({type(e).__name__}): {e}")
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return {}
 
     @staticmethod
@@ -95,19 +181,54 @@ class ScriptRunner:
             'import os',
             'import sys',
             '__import__',
+            '__import',
             'exec(',
             'eval(',
             'open(',
             'subprocess',
             'socket',
+            'getattr(',
+            'setattr(',
+            'lambda ',
+            '__builtins__',
+            'compile(',
+            'input(',
+            'print(',
         ]
 
         for pattern in dangerous_patterns:
             if pattern in script_body:
+                logger.warning(f"Script validation failed: dangerous pattern '{pattern}' detected")
                 return False, f"Dangerous pattern detected: {pattern}"
+        
+        # Additional check for eval with dangerous string content
+        import re
+        # Look for eval(...) with strings that might contain dangerous content
+        eval_pattern = re.findall(r'eval\s*\(\s*["\']([^"\']*)["\']\s*\)', script_body, re.IGNORECASE)
+        for eval_content in eval_pattern:
+            if any(danger in eval_content.lower() for danger in ['import', '__import', 'os.', 'sys.', 'subprocess', 'socket', 'getattr', 'setattr']):
+                logger.warning(f"Script validation failed: eval() with dangerous string detected")
+                return False, f"Dangerous pattern detected: eval() with dangerous string"
+        
+        # Check for any result = eval patterns
+        if re.search(r'result\s*=\s*eval\s*\(', script_body, re.IGNORECASE):
+            logger.warning(f"Script validation failed: result = eval(...) pattern detected")
+            return False, "Dangerous pattern detected: result = eval(...)"
+        
+        # Check for getattr/setattr patterns
+        if re.search(r'getattr\(|setattr\(', script_body, re.IGNORECASE):
+            logger.warning(f"Script validation failed: getattr/setattr pattern detected")
+            return False, "Dangerous pattern detected: getattr/setattr"
+        
+        # Check for lambda expressions
+        if re.search(r'=\s*lambda\s', script_body):
+            logger.warning(f"Script validation failed: lambda expression detected")
+            return False, "Dangerous pattern detected: lambda expression"
 
         try:
             compile(script_body, '<string>', 'exec')
+            logger.info("[ScriptRunner] Script validation passed")
             return True, ""
         except SyntaxError as e:
+            logger.error(f"Script validation compile error: {e}")
             return False, f"Syntax error: {e}"
