@@ -53,10 +53,6 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
     }
   }
 
-  const handleRefresh = async () => {
-    await loadConfig()
-  }
-
   const handleClearScripts = async () => {
     const confirmed = window.confirm(
       'Clear all scripts? This will force a fresh script to be generated for the next extraction. This cannot be undone.'
@@ -89,7 +85,7 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
         <div className="config-content">
           {!hasLoaded && !isLoading && (
             <div className="load-prompt">
-              <p>Click "Load" or "Check Configuration" to view current settings.</p>
+              <p>Click "Check Configuration" to view current settings.</p>
             </div>
           )}
 
@@ -155,13 +151,6 @@ export const ConfigPanel = ({ isOpen, onClose }) => {
               disabled={isLoading}
             >
               {isLoading ? 'Checking...' : 'Check Configuration'}
-            </button>
-            <button
-              onClick={handleRefresh}
-              className="refresh-btn"
-              disabled={isLoading}
-            >
-              Load
             </button>
             <button
               onClick={onClose}

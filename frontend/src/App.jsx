@@ -266,14 +266,13 @@ function App() {
       <header className="app-header">
         <div className="header-content">
           <h1>Dokument</h1>
-          <p>Intelligent Document Extraction System</p>
         </div>
 <div className="header-actions">
-          <button className="config-btn" onClick={() => setShowConfig(true)} title="Configuration">
-            ⚙
-          </button>
           <button className="config-btn" onClick={toggleTheme} title="Toggle Theme">
             {theme === 'day' ? '☀' : '☾'}
+          </button>
+          <button className="config-btn" onClick={() => setShowConfig(true)} title="Settings">
+            Settings
           </button>
         </div>
       </header>

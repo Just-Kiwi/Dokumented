@@ -117,15 +117,15 @@
 }
 
 .message.success {
-  background: #c8e6c9;
-  color: #2e7d32;
-  border: 1px solid #81c784;
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success-border);
 }
 
 .message.error {
-  background: #ffcdd2;
-  color: #c62828;
-  border: 1px solid #ef5350;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error-border);
 }
 
 .config-actions {
@@ -148,12 +148,12 @@
 }
 
 .check-btn {
-  background: #2196F3;
+  background: var(--primary, #2196F3);
   color: white;
 }
 
 .check-btn:hover {
-  background: #0b7dda;
+  background: var(--primary-hover, #0b7dda);
 }
 
 .save-btn {
@@ -234,26 +234,26 @@
 }
 
 .key-configured {
-  color: #4CAF50;
+  color: var(--success);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .key-not-configured {
-  color: #f44336;
+  color: var(--error);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .check-icon {
-  color: #4CAF50;
+  color: var(--success);
   font-weight: bold;
 }
 
 .x-icon {
-  color: #f44336;
+  color: var(--error);
   font-weight: bold;
 }
 
@@ -294,15 +294,7 @@
   white-space: nowrap;
 }
 
-/* Refresh Button */
-.refresh-btn {
-  background: #ff9800;
-  color: white;
-}
 
-.refresh-btn:hover {
-  background: #e68a00;
-}
 
 /* Config Info - How to Configure */
 .config-info ol {
@@ -347,6 +339,26 @@
   }
 }
 
+/* Day theme colors */
+.config-panel {
+  --success: #4CAF50;
+  --success-bg: #c8e6c9;
+  --success-border: #81c784;
+  --error: #f44336;
+  --error-bg: #ffcdd2;
+  --error-border: #ef5350;
+}
+
+/* Night theme colors */
+[data-theme="night"] .config-panel {
+  --success: #66bb6a;
+  --success-bg: #1b3320;
+  --success-border: #2e5a35;
+  --error: #ef5350;
+  --error-bg: #3d1f1f;
+  --error-border: #5c3535;
+}
+
 /* Danger Section */
 .danger-section {
   margin-top: 30px;
@@ -364,6 +376,7 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.3s;
+  margin-top: 12px;
 }
 
 .danger-btn:hover {
